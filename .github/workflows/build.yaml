@@ -30,3 +30,10 @@ jobs:
           args: build --clean --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: download-manager-binaries
+          path: dist/*/download-manager*
+          retention-days: 5
