@@ -31,13 +31,13 @@ type DownloadStatus struct {
 	State        DownloadState
 }
 
-type DownloaderConfig struct {
+type Download struct {
 	URL            string
 	SavePath       string
 	BandwidthLimit int64 // bytes per second (-1 means unlimited)
 }
 
-func NewDownloader(cfg DownloaderConfig) Downloader {
+func NewDownloader(cfg Download) Downloader {
 	return &defaultDownloader{
 		url:            cfg.URL,
 		savePath:       cfg.SavePath,
