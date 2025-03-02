@@ -10,24 +10,22 @@ import (
 )
 
 const getAllDownloads = `-- name: GetAllDownloads :many
-SELECT id
-FROM
-    downloads
+SELECT id, queueid FROM downloads
 `
 
-func (q *Queries) GetAllDownloads(ctx context.Context) ([]interface{}, error) {
+func (q *Queries) GetAllDownloads(ctx context.Context) ([]Download, error) {
 	rows, err := q.db.QueryContext(ctx, getAllDownloads)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []interface{}
+	var items []Download
 	for rows.Next() {
-		var id interface{}
-		if err := rows.Scan(&id); err != nil {
+		var i Download
+		if err := rows.Scan(&i.ID, &i.Queueid); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

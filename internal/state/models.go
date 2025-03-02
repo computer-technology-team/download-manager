@@ -4,6 +4,21 @@
 
 package state
 
+import (
+	"database/sql"
+)
+
 type Download struct {
-	ID interface{}
+	ID      int64
+	Queueid int64
+}
+
+type Queue struct {
+	ID            int64
+	Name          string
+	Directory     string
+	Maxbandwidth  sql.NullInt64
+	Downloadstart sql.NullString
+	Downloadend   sql.NullString
+	Retrylimit    int64
 }
