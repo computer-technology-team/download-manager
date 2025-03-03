@@ -25,3 +25,4 @@ go.work.sum
 .env
 
 download-manager
+download-manager.log
