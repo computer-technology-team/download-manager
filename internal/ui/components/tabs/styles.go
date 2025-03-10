@@ -3,16 +3,6 @@ package tabs
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	// Help row style
-	helpRowStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			PaddingLeft(1).
-			PaddingRight(1).
-			Height(1).
-			MaxHeight(1).
-			MarginTop(0).
-			Align(lipgloss.Left)
-
 	// Simple border style
 	inactiveTabBorder = lipgloss.Border{
 		Top:         "─",

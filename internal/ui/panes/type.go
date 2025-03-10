@@ -5,7 +5,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Keeping the ELM structure whilst adding KeyMap
 type Pane interface {
-	tea.Model
 	help.KeyMap
+	Init() tea.Cmd
+	Update(tea.Msg) (Pane, tea.Cmd)
+	View() string
 }

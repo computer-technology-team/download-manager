@@ -57,6 +57,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.help.Width = msg.Width
+
+		cmds := make([]tea.Cmd, len(m.tabs))
+		for i, t := range m.tabs {
+			m.tabs[i].Pane, cmds[i] = t.Pane.Update(msg)
+		}
+
+		return m, tea.Batch(cmds...)
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.quit):
@@ -87,7 +94,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	}
 
-	return m, nil
+	var childCmd tea.Cmd
+	m.tabs[m.activeTab].Pane, childCmd = m.GetActiveTab().Pane.Update(msg)
+
+	return m, childCmd
 }
 
 func (m model) View() string {

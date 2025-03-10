@@ -22,6 +22,10 @@ func (s samplePane) ShortHelp() []key.Binding {
 	}
 }
 
+func (s samplePane) Update(_ tea.Msg) (Pane, tea.Cmd) {
+	return s, nil
+}
+
 func NewSamplePane(s string) Pane {
 	return samplePane{
 		Model: sampletext.New(s),
