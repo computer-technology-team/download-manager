@@ -9,25 +9,49 @@ import (
 	"context"
 )
 
-const getAllDownloads = `-- name: GetAllDownloads :many
-SELECT id
-FROM
-    downloads
+const createDownload = `-- name: CreateDownload :exec
+INSERT INTO downloads (url, save_path, bandwidth_limit_bytes_p_s)
+VALUES (?, ?, ?)
 `
 
-func (q *Queries) GetAllDownloads(ctx context.Context) ([]interface{}, error) {
+type CreateDownloadParams struct {
+	Url                   string
+	SavePath              string
+	BandwidthLimitBytesPS float64
+}
+
+func (q *Queries) CreateDownload(ctx context.Context, arg CreateDownloadParams) error {
+	_, err := q.db.ExecContext(ctx, createDownload, arg.Url, arg.SavePath, arg.BandwidthLimitBytesPS)
+	return err
+}
+
+const getAllDownloads = `-- name: GetAllDownloads :many
+SELECT id, url, save_path, bandwidth_limit_bytes_p_s, speed_bytes_p_s, progress_persent, state, created_at, updated_at FROM downloads
+`
+
+func (q *Queries) GetAllDownloads(ctx context.Context) ([]Download, error) {
 	rows, err := q.db.QueryContext(ctx, getAllDownloads)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []interface{}
+	var items []Download
 	for rows.Next() {
-		var id interface{}
-		if err := rows.Scan(&id); err != nil {
+		var i Download
+		if err := rows.Scan(
+			&i.ID,
+			&i.Url,
+			&i.SavePath,
+			&i.BandwidthLimitBytesPS,
+			&i.SpeedBytesPS,
+			&i.ProgressPersent,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -36,4 +60,38 @@ func (q *Queries) GetAllDownloads(ctx context.Context) ([]interface{}, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getDownloadStatus = `-- name: GetDownloadStatus :one
+SELECT state, progress_persent, speed_bytes_p_s FROM downloads
+WHERE id = ?
+`
+
+type GetDownloadStatusRow struct {
+	State           string
+	ProgressPersent float64
+	SpeedBytesPS    float64
+}
+
+func (q *Queries) GetDownloadStatus(ctx context.Context, id interface{}) (GetDownloadStatusRow, error) {
+	row := q.db.QueryRowContext(ctx, getDownloadStatus, id)
+	var i GetDownloadStatusRow
+	err := row.Scan(&i.State, &i.ProgressPersent, &i.SpeedBytesPS)
+	return i, err
+}
+
+const updateDownloadState = `-- name: UpdateDownloadState :exec
+UPDATE downloads
+SET state = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`
+
+type UpdateDownloadStateParams struct {
+	State string
+	ID    interface{}
+}
+
+func (q *Queries) UpdateDownloadState(ctx context.Context, arg UpdateDownloadStateParams) error {
+	_, err := q.db.ExecContext(ctx, updateDownloadState, arg.State, arg.ID)
+	return err
 }

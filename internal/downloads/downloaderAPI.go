@@ -1,5 +1,11 @@
 package downloads
 
+import (
+	"database/sql"
+
+	"github.com/computer-technology-team/download-manager.git/internal/state"
+)
+
 type DownloadState string
 
 const (
@@ -11,7 +17,7 @@ const (
 	StateFailed      DownloadState = "failed"
 )
 
-type Downloader interface {
+type DownloadHandler interface {
 	Start() error
 
 	Pause() error
@@ -31,17 +37,19 @@ type DownloadStatus struct {
 	State        DownloadState
 }
 
-type Download struct {
-	URL            string
-	SavePath       string
-	BandwidthLimit int64 // bytes per second (-1 means unlimited)
+type DownloaderConfig struct {
+	URL                   string
+	SavePath              string
+	BandwidthLimitBytesPS int64 // (-1 for unlimited)
 }
 
-func NewDownloader(cfg Download) Downloader {
+func NewDownloader(cfg DownloaderConfig, db *sql.DB) DownloadHandler {
 	return &defaultDownloader{
 		url:            cfg.URL,
 		savePath:       cfg.SavePath,
-		bandwidthLimit: cfg.BandwidthLimit,
+		bandwidthLimit: cfg.BandwidthLimitBytesPS,
 		state:          StateInitialized,
+		queries:        state.New(db),
+		ticker:         NewTicker(),
 	}
 }

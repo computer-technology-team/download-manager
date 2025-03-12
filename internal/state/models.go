@@ -4,6 +4,18 @@
 
 package state
 
+import (
+	"database/sql"
+)
+
 type Download struct {
-	ID interface{}
+	ID                    interface{}
+	Url                   string
+	SavePath              string
+	BandwidthLimitBytesPS float64
+	SpeedBytesPS          float64
+	ProgressPersent       float64
+	State                 string
+	CreatedAt             sql.NullTime
+	UpdatedAt             sql.NullTime
 }
