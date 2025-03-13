@@ -29,6 +29,8 @@ type DownloadHandler interface {
 	Retry() error
 
 	Status() DownloadStatus
+	
+	GetTicker() *Ticker
 }
 
 type DownloadStatus struct {
@@ -44,7 +46,7 @@ type DownloaderConfig struct {
 }
 
 func NewDownloader(cfg DownloaderConfig, db *sql.DB) DownloadHandler {
-	return &defaultDownloader{
+	d := defaultDownloader{
 		url:            cfg.URL,
 		savePath:       cfg.SavePath,
 		bandwidthLimit: cfg.BandwidthLimitBytesPS,
@@ -52,4 +54,6 @@ func NewDownloader(cfg DownloaderConfig, db *sql.DB) DownloadHandler {
 		queries:        state.New(db),
 		ticker:         NewTicker(),
 	}
+	d.ticker.SetBandwidth(d.bandwidthLimit)
+	return &d
 }

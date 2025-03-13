@@ -16,6 +16,11 @@ type defaultDownloader struct {
 	state          DownloadState
 	queries        *state.Queries
 	ticker         Ticker
+	hasStarted     bool
+}
+
+func (d *defaultDownloader) GetTicker() *Ticker {
+	return &d.ticker
 }
 
 func (d *defaultDownloader) Start() error {
@@ -27,7 +32,7 @@ func (d *defaultDownloader) Start() error {
 	// if err != nil {
 	// 	// TODO return err
 	// }
-
+	d.hasStarted = true
 	req, err := http.NewRequest("HEAD", d.url, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -36,9 +41,6 @@ func (d *defaultDownloader) Start() error {
 	}
 	for k, vs := range resp.Header { // TODO test if
 		fmt.Printf("%s: %d, %+v\n", k, len(vs), vs)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to get header: %w", err) //TODO
 	}
 
 	writer := NewSynchronizedFileWriter(d.savePath)
@@ -96,26 +98,30 @@ func getFileSize(url string) (int64, error) {
 }
 
 func (d *defaultDownloader) Pause() error {
-	err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
-		State: string(StatePaused),
-		ID:    d.url, // Use the URL or ID as the key
-	})
-	if err != nil {
-		return err
-	}
-
+	// err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
+	// 	State: string(StatePaused),
+	// 	ID:    d.url, // Use the URL or ID as the key
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+	d.ticker.Quite()
 	return nil
 }
 
 func (d *defaultDownloader) Resume() error {
-	err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
-		State: string(StateDownloading),
-		ID:    d.url, // Use the URL or ID as the key
-	})
-	if err != nil {
-		return err
+	// err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
+	// 	State: string(StateDownloading),
+	// 	ID:    d.url, // Use the URL or ID as the key
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+	if d.hasStarted{
+		d.ticker.Start()
+	} else{
+		d.Start()
 	}
-
 	return nil
 }
 
@@ -148,7 +154,7 @@ func (d *defaultDownloader) Status() DownloadStatus {
 		return DownloadStatus{State: StateFailed}
 	}
 
-	return DownloadStatus{
+	return DownloadStatus{	
 		ProgressRate: float32(status.ProgressPersent),
 		Speed:        float32(status.SpeedBytesPS),
 		State:        DownloadState(status.State),
