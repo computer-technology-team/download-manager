@@ -9,20 +9,21 @@ const MaxpacketSize int64 = 65535
 const defaultBandWidth int64 = 1e6
 
 type Ticker struct {
-	mutex               sync.Mutex
+	mutex               *sync.Mutex
 	tickerDelay         float64
 	tokens              chan interface{}
 	generationQuiteChan chan interface{}
 }
 
 func NewTicker() Ticker {
-	return Ticker{
-		mutex:               sync.Mutex{},
+	t :=  Ticker{
+		mutex:               &sync.Mutex{},
 		tickerDelay:         0.,
 		tokens:              make(chan interface{}, 100),
 		generationQuiteChan: make(chan interface{}, 1),
 	}
-
+	t.SetBandwidth(defaultBandWidth)
+	return t
 }
 func (t *Ticker) SetBandwidth(BandwidthLimitBytesPS int64) {
 	t.mutex.Lock()
