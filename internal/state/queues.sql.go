@@ -11,45 +11,45 @@ import (
 )
 
 const createQueue = `-- name: CreateQueue :one
-INSERT INTO queues (Name, Directory, MaxBandwidth, DownloadStart, DownloadEnd, RetryLimit)
+INSERT INTO queues (name, directory, max_bandwidth, download_start, download_end, retry_limit)
 VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, name, directory, maxbandwidth, downloadstart, downloadend, retrylimit
+RETURNING id, name, directory, max_bandwidth, download_start, download_end, retry_limit
 `
 
 type CreateQueueParams struct {
 	Name          string
 	Directory     string
-	Maxbandwidth  sql.NullInt64
-	Downloadstart sql.NullString
-	Downloadend   sql.NullString
-	Retrylimit    int64
+	MaxBandwidth  sql.NullInt64
+	DownloadStart sql.NullString
+	DownloadEnd   sql.NullString
+	RetryLimit    int64
 }
 
 func (q *Queries) CreateQueue(ctx context.Context, arg CreateQueueParams) (Queue, error) {
 	row := q.db.QueryRowContext(ctx, createQueue,
 		arg.Name,
 		arg.Directory,
-		arg.Maxbandwidth,
-		arg.Downloadstart,
-		arg.Downloadend,
-		arg.Retrylimit,
+		arg.MaxBandwidth,
+		arg.DownloadStart,
+		arg.DownloadEnd,
+		arg.RetryLimit,
 	)
 	var i Queue
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Directory,
-		&i.Maxbandwidth,
-		&i.Downloadstart,
-		&i.Downloadend,
-		&i.Retrylimit,
+		&i.MaxBandwidth,
+		&i.DownloadStart,
+		&i.DownloadEnd,
+		&i.RetryLimit,
 	)
 	return i, err
 }
 
 const deleteQueue = `-- name: DeleteQueue :exec
 DELETE FROM queues
-WHERE ID = ?
+WHERE id = ?
 `
 
 func (q *Queries) DeleteQueue(ctx context.Context, id int64) error {
@@ -58,8 +58,8 @@ func (q *Queries) DeleteQueue(ctx context.Context, id int64) error {
 }
 
 const getQueue = `-- name: GetQueue :one
-SELECT id, name, directory, maxbandwidth, downloadstart, downloadend, retrylimit FROM queues
-WHERE ID = ?
+SELECT id, name, directory, max_bandwidth, download_start, download_end, retry_limit FROM queues
+WHERE id = ?
 `
 
 func (q *Queries) GetQueue(ctx context.Context, id int64) (Queue, error) {
@@ -69,16 +69,16 @@ func (q *Queries) GetQueue(ctx context.Context, id int64) (Queue, error) {
 		&i.ID,
 		&i.Name,
 		&i.Directory,
-		&i.Maxbandwidth,
-		&i.Downloadstart,
-		&i.Downloadend,
-		&i.Retrylimit,
+		&i.MaxBandwidth,
+		&i.DownloadStart,
+		&i.DownloadEnd,
+		&i.RetryLimit,
 	)
 	return i, err
 }
 
 const listQueues = `-- name: ListQueues :many
-SELECT id, name, directory, maxbandwidth, downloadstart, downloadend, retrylimit FROM queues
+SELECT id, name, directory, max_bandwidth, download_start, download_end, retry_limit FROM queues
 `
 
 func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
@@ -94,10 +94,10 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 			&i.ID,
 			&i.Name,
 			&i.Directory,
-			&i.Maxbandwidth,
-			&i.Downloadstart,
-			&i.Downloadend,
-			&i.Retrylimit,
+			&i.MaxBandwidth,
+			&i.DownloadStart,
+			&i.DownloadEnd,
+			&i.RetryLimit,
 		); err != nil {
 			return nil, err
 		}
@@ -114,18 +114,18 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 
 const updateQueue = `-- name: UpdateQueue :one
 UPDATE queues
-SET Name = ?, Directory = ?, MaxBandwidth = ?, DownloadStart = ?, DownloadEnd = ?, RetryLimit = ?
-WHERE ID = ?
-RETURNING id, name, directory, maxbandwidth, downloadstart, downloadend, retrylimit
+SET name = ?, directory = ?, max_bandwidth = ?, download_start = ?, download_end = ?, retry_limit = ?
+WHERE id = ?
+RETURNING id, name, directory, max_bandwidth, download_start, download_end, retry_limit
 `
 
 type UpdateQueueParams struct {
 	Name          string
 	Directory     string
-	Maxbandwidth  sql.NullInt64
-	Downloadstart sql.NullString
-	Downloadend   sql.NullString
-	Retrylimit    int64
+	MaxBandwidth  sql.NullInt64
+	DownloadStart sql.NullString
+	DownloadEnd   sql.NullString
+	RetryLimit    int64
 	ID            int64
 }
 
@@ -133,10 +133,10 @@ func (q *Queries) UpdateQueue(ctx context.Context, arg UpdateQueueParams) (Queue
 	row := q.db.QueryRowContext(ctx, updateQueue,
 		arg.Name,
 		arg.Directory,
-		arg.Maxbandwidth,
-		arg.Downloadstart,
-		arg.Downloadend,
-		arg.Retrylimit,
+		arg.MaxBandwidth,
+		arg.DownloadStart,
+		arg.DownloadEnd,
+		arg.RetryLimit,
 		arg.ID,
 	)
 	var i Queue
@@ -144,10 +144,10 @@ func (q *Queries) UpdateQueue(ctx context.Context, arg UpdateQueueParams) (Queue
 		&i.ID,
 		&i.Name,
 		&i.Directory,
-		&i.Maxbandwidth,
-		&i.Downloadstart,
-		&i.Downloadend,
-		&i.Retrylimit,
+		&i.MaxBandwidth,
+		&i.DownloadStart,
+		&i.DownloadEnd,
+		&i.RetryLimit,
 	)
 	return i, err
 }

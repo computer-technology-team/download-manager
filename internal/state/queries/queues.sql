@@ -1,21 +1,21 @@
 -- name: CreateQueue :one
-INSERT INTO queues (Name, Directory, MaxBandwidth, DownloadStart, DownloadEnd, RetryLimit)
+INSERT INTO queues (name, directory, max_bandwidth, download_start, download_end, retry_limit)
 VALUES (?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetQueue :one
 SELECT * FROM queues
-WHERE ID = ?;
+WHERE id = ?;
 
 -- name: ListQueues :many
 SELECT * FROM queues;
 
 -- name: UpdateQueue :one
 UPDATE queues
-SET Name = ?, Directory = ?, MaxBandwidth = ?, DownloadStart = ?, DownloadEnd = ?, RetryLimit = ?
-WHERE ID = ?
+SET name = ?, directory = ?, max_bandwidth = ?, download_start = ?, download_end = ?, retry_limit = ?
+WHERE id = ?
 RETURNING *;
 
 -- name: DeleteQueue :exec
 DELETE FROM queues
-WHERE ID = ?;
+WHERE id = ?;

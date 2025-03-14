@@ -1,14 +1,24 @@
 package logging
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+
+	"github.com/computer-technology-team/download-manager.git/datadir"
 )
 
 func InitializeLogger() (func() error, error) {
-	logFile, err := os.OpenFile("download-manager.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	appDataDir, err := datadir.GetAppDataDir()
 	if err != nil {
-		return logFile.Close, err
+		return nil, fmt.Errorf("could not get app data directory: %w", err)
+	}
+
+	logFile, err := os.OpenFile(filepath.Join(appDataDir, "download-manager.log"),
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return logFile.Close, fmt.Errorf("could not open log file: %w", err)
 	}
 
 	logger := slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{
