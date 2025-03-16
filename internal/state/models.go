@@ -10,15 +10,15 @@ import (
 
 type Download struct {
 	ID      int64
-	Queueid int64
+	QueueID int64
 }
 
 type Queue struct {
 	ID            int64
 	Name          string
 	Directory     string
-	Maxbandwidth  sql.NullInt64
-	Downloadstart sql.NullString
-	Downloadend   sql.NullString
-	Retrylimit    int64
+	MaxBandwidth  sql.NullInt64
+	DownloadStart sql.NullString
+	DownloadEnd   sql.NullString
+	RetryLimit    int64
 }
