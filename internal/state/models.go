@@ -9,8 +9,19 @@ import (
 )
 
 type Download struct {
-	ID      int64
-	QueueID int64
+	ID       int64
+	QueueID  int64
+	Url      string
+	SavePath string
+	State    string
+}
+
+type DownloadChunk struct {
+	ID             int64
+	RangeStart     int64
+	RangeEnd       int64
+	CurrentPointer int64
+	DownloadID     int64
 }
 
 type Queue struct {
@@ -18,7 +29,7 @@ type Queue struct {
 	Name          string
 	Directory     string
 	MaxBandwidth  sql.NullInt64
-	DownloadStart sql.NullString
-	DownloadEnd   sql.NullString
+	StartDownload string
+	EndDownload   string
 	RetryLimit    int64
 }
