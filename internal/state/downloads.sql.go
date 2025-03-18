@@ -10,7 +10,7 @@ import (
 )
 
 const getAllDownloads = `-- name: GetAllDownloads :many
-SELECT id, queue_id, url, save_path, state FROM downloads
+SELECT id, queue_id, url, save_path, state, retries FROM downloads
 `
 
 func (q *Queries) GetAllDownloads(ctx context.Context) ([]Download, error) {
@@ -28,6 +28,7 @@ func (q *Queries) GetAllDownloads(ctx context.Context) ([]Download, error) {
 			&i.Url,
 			&i.SavePath,
 			&i.State,
+			&i.Retries,
 		); err != nil {
 			return nil, err
 		}

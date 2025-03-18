@@ -4,6 +4,8 @@ CREATE TABLE downloads (
     url TEXT NOT NULL,
     save_path TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'PAUSED',
+    retries INTEGER DEFAULT 0,
+
     FOREIGN KEY (queue_id) REFERENCES queues(id) ON DELETE CASCADE
 );
 

@@ -14,6 +14,7 @@ type Download struct {
 	Url      string
 	SavePath string
 	State    string
+	Retries  sql.NullInt64
 }
 
 type DownloadChunk struct {
