@@ -1,6 +1,7 @@
 package downloads
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -16,7 +17,7 @@ type Ticker struct {
 }
 
 func NewTicker() Ticker {
-	t :=  Ticker{
+	t := Ticker{
 		mutex:               &sync.Mutex{},
 		tickerDelay:         0.,
 		tokens:              make(chan interface{}, 100),
@@ -36,6 +37,7 @@ func (t *Ticker) generate() {
 		case <-t.generationQuiteChan:
 			return
 		default:
+			fmt.Println("ticker delay: ", t.tickerDelay)
 			t.tokens <- 0
 			time.Sleep(time.Duration(t.tickerDelay * 1e9))
 		}
@@ -46,9 +48,9 @@ func (t *Ticker) Start() {
 	go t.generate()
 }
 
-func (t *Ticker) GetToken() {
+func (t *Ticker) GetToken() {// TODO don't block if BW is limitless
 	<-t.tokens
 }
-func (t *Ticker) Quite(){
-	t.generationQuiteChan<- 0
+func (t *Ticker) Quite() {//TODO handle limitless
+	t.generationQuiteChan <- 0
 }
