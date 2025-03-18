@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 )
 
 type DownloadChunkHandler struct {
@@ -19,6 +20,8 @@ type DownloadChunkHandler struct {
 	ticker         *Ticker
 	currentPointer int64
 	syncWriter     SynchronizedFileWriter
+	progressMutex sync.Mutex
+	// چنل ریزوم
 }
 
 func NewDownloadChunkHandler(cfg DownloaderConfig, rangeL int64, rangeR int64, sharedTicker *Ticker, syncWriter SynchronizedFileWriter) DownloadChunkHandler {
@@ -31,6 +34,7 @@ func NewDownloadChunkHandler(cfg DownloaderConfig, rangeL int64, rangeR int64, s
 		ticker:         sharedTicker,
 		currentPointer: rangeL,
 		syncWriter:     syncWriter,
+		progressMutex: sync.Mutex{},
 	}
 }
 func (chunkHandler *DownloadChunkHandler) Start() {
@@ -39,18 +43,21 @@ func (chunkHandler *DownloadChunkHandler) Start() {
 
 func (chunkHandler *DownloadChunkHandler) start() {
 
-	temp, err := getConn(chunkHandler.url) // connect to the proper host with the correct protocol
-
+	conn, err := getConn(chunkHandler.url) // connect to the proper host with the correct protocol
 	if err != nil {
 		fmt.Println("error in starting connection: ", err)
 		//TODO handle error
 	}
 
-	conn := *temp                                                                                  // TODO would copying be a problem?
-	reader := sendRequest(chunkHandler.url, &conn, chunkHandler.rangeStart, chunkHandler.rangeEnd) // send get request
-	buffer := make([]byte, 4096)
+	reader := sendRequest(chunkHandler.url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd) // send get request
+	buffer := make([]byte, MaxpacketSize)
 	for {
+		if puased {
+			// از روی چنل ریزوم بخون
+			// تا وقتی کسی چیزی روش ننوشته این جا گیر می‌کنه
+		}
 		chunkHandler.ticker.GetToken()
+		fmt.Println(chunkHandler.rangeStart)
 		n, err := reader.Read(buffer)
 		if err != nil && err != io.EOF {
 			fmt.Println("Error reading:", err) //TODO
@@ -59,7 +66,10 @@ func (chunkHandler *DownloadChunkHandler) start() {
 		n = int(min(int64(n), chunkHandler.rangeEnd-chunkHandler.currentPointer))
 
 		chunkHandler.syncWriter.Write(buffer, chunkHandler.currentPointer, int64(n))
+		
+		chunkHandler.progressMutex.Lock()
 		chunkHandler.currentPointer += int64(n)
+		chunkHandler.progressMutex.Unlock()
 
 		if chunkHandler.currentPointer == chunkHandler.rangeEnd {
 			break // TODO free wait list
@@ -67,8 +77,19 @@ func (chunkHandler *DownloadChunkHandler) start() {
 	}
 }
 
-func sendRequest(requestURL string, conn *tls.Conn, rangeStart, rangeEnd int64) io.Reader { // send get and skip header
+func (chunkHandler *DownloadChunkHandler) Pause() {
+	// پاز رو تورو کن
+	// کاری دیگه؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟
+}
+
+func (chunkHandler *DownloadChunkHandler) Resume() {
+	// روی چنل رزوم بنویس
+	// پاز هم فالس کن
+}
+
+func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) io.Reader { // send get and skip header
 	parsedURL, _ := url.Parse(requestURL)
+	
 	request := fmt.Sprintf("GET %s HTTP/1.1\r\n"+
 		"Host: %s\r\n"+
 		"Range: bytes=%d-%d\r\n"+
@@ -79,29 +100,48 @@ func sendRequest(requestURL string, conn *tls.Conn, rangeStart, rangeEnd int64) 
 	resp, err := http.ReadResponse(reader, nil)
 	if err != nil {
 		fmt.Println("Error reading HTTP response:", err)
-
 	}
 	// Skip the headers and read the response body directly
 
 	return resp.Body
 }
 
-func getConn(requestURL string) (*tls.Conn, error) {
+func getConn(requestURL string) (net.Conn, error) {
 	parsedURL, _ := url.Parse(requestURL) // TODO handle error
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:443", parsedURL.Host))
-	if err != nil {
-		return nil, err
-	}
+	
+	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:443", parsedURL.Host))
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	tlsConn := tls.Client(conn, &tls.Config{
-		InsecureSkipVerify: true, // Set to false in production for certificate verification
+	// tlsConn := tls.Client(conn, &tls.Config{
+	// 	InsecureSkipVerify: true, // Set to false in production for certificate verification
+	// })
+
+	// // Handshake and start the TLS connection
+	// if err := tlsConn.Handshake(); err != nil {
+	// 	fmt.Println("TLS handshake failed:", err) //
+	// }
+
+	tlsConn, err := tls.Dial("tcp",parsedURL.Host+":443", &tls.Config{
+		InsecureSkipVerify: true, 
 	})
 
-	// Handshake and start the TLS connection
-	if err := tlsConn.Handshake(); err != nil {
-		fmt.Println("TLS handshake failed:", err) //TODO
+	if err == nil {
+		return tlsConn,nil
 	}
-	fmt.Println("!")
 
-	return tlsConn, nil
+	conn,err := net.Dial("tcp",parsedURL.Host+":80")
+	if err == nil{
+		return conn, nil
+	}
+
+
+	return nil, err // failed to connect to either 443 or 80
+}
+
+func (DownloadHandler *DownloadChunkHandler) getRemaining() int64 {
+	DownloadHandler.progressMutex.Lock()
+	defer DownloadHandler.progressMutex.Unlock()
+	return DownloadHandler.rangeEnd - DownloadHandler.currentPointer
 }
