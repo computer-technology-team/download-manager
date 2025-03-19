@@ -19,7 +19,7 @@ type DownloadChunkHandler struct {
 	rangeStart     int64
 	rangeEnd       int64
 	currentPointer int64
-	pausedChan         *chan int
+	pausedChan     *chan int
 }
 
 func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) DownloadChunkHandler {

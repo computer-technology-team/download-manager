@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
+	// "github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/google/uuid"
 )
@@ -42,6 +43,8 @@ func (d *defaultDownloader) keepTrackOfProgress() {
 		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
 		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
 		d.progress = currentProgress
+
+		// queues.signal
 	}
 }
 
