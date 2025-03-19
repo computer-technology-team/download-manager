@@ -6,9 +6,9 @@ type DownloadState string
 
 const (
 	StateInProgress DownloadState = "IN_PROGRESS"
-	StatePaused      DownloadState = "PAUSED"
-	StateCompleted   DownloadState = "COMPLETED"
-	StateFailed      DownloadState = "FAILED"
+	StatePaused     DownloadState = "PAUSED"
+	StateCompleted  DownloadState = "COMPLETED"
+	StateFailed     DownloadState = "FAILED"
 )
 
 type DownloadHandler interface {
@@ -16,3 +16,8 @@ type DownloadHandler interface {
 	Pause() error
 }
 
+type DownloadStatus struct {
+	ProgressPercentage float32
+	Speed              float32 // bytes per second
+	State              DownloadState
+}

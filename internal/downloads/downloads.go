@@ -1,35 +1,35 @@
 package downloads
 
 import (
-	// "context"
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
-	"github.com/computer-technology-team/download-manager.git/internal/queues"
+	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
+	"github.com/google/uuid"
 )
 
 const progressUpdatePeriod int = 1000 // milliseconds
 const movingAverageScale float64 = .1 // new average = old * (1 - alpha) + current * alpha
+const numberOfChuncks = 10
+
 type defaultDownloader struct {
-	url                   string
-	savePath              string
-	bandwidthLimit        int64
-	state                 DownloadState
-	queries               *state.Queries
-	ticker                queues.Ticker
-	hasStarted            bool
-	chunkHandlers         []*DownloadChunkHandler
-	progress              int64
-	progressRate          float64
-	progressTrackingMutex sync.Mutex
-	size                  int64
+	id            int64
+	queueID       int64
+	url           string
+	savePath      string
+	state         DownloadState
+	ticker        bandwidthlimit.Ticker
+	chunkHandlers []*DownloadChunkHandler
+	progress      int64
+	progressRate  float64
+	size          int64
 }
 
-func (d *defaultDownloader) GetTicker() *Ticker {
+func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
 	return &d.ticker
 }
 
@@ -38,10 +38,8 @@ func (d *defaultDownloader) keepTrackOfProgress() {
 		time.Sleep(time.Duration(progressUpdatePeriod))
 		currentProgress := d.getTotalProgress()
 		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
-		d.progressTrackingMutex.Lock()
 		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
 		d.progress = currentProgress
-		d.progressTrackingMutex.Unlock()
 	}
 }
 
@@ -53,17 +51,7 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 	return d.size - total
 }
 
-func (d *defaultDownloader) Start() error {
-	// err := d.queries.CreateDownload(context.Background(), state.CreateDownloadParams{
-	// 	Url:                   d.url,
-	// 	SavePath:              d.savePath,
-	// 	BandwidthLimitBytesPS: float64(d.bandwidthLimit),
-	// })
-	// if err != nil {
-	// 	// TODO return err
-	// }
-	
-	d.state = StateDownloading
+func (d *defaultDownloader) Start(_ context.Context) error {
 	d.hasStarted = true
 	req, err := http.NewRequest("HEAD", d.url, nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -80,23 +68,28 @@ func (d *defaultDownloader) Start() error {
 	writer := NewSynchronizedFileWriter(d.savePath)
 	segmentsList := d.getChunkSegments(resp.Header)
 
-	chunkhandlersList := make([]*DownloadChunkHandler, 0)
+	if len(d.chunkHandlers) != numberOfChuncks {
+		chunkhandlersList := make([]*DownloadChunkHandler, 0)
 
-	for _, segment := range segmentsList {
-		l, r := segment[0], segment[1]
-		fmt.Println(l, r, "range")
-		handler := NewDownloadChunkHandler(DownloaderConfig{
-			URL:                   d.url,
-			SavePath:              d.savePath,
-			BandwidthLimitBytesPS: d.bandwidthLimit,
-		}, l, r, &d.ticker, writer)
-		chunkhandlersList = append(chunkhandlersList, &handler)
+		for _, segment := range segmentsList {
+			l, r := segment[0], segment[1]
+
+			handler := NewDownloadChunkHandler(state.DownloadChunk{
+				ID:             uuid.NewString(),
+				RangeStart:     l,
+				RangeEnd:       r,
+				CurrentPointer: l,
+				DownloadID:     d.id,
+			},)
+
+			chunkhandlersList = append(chunkhandlersList, &handler)
+		}
+
+		d.chunkHandlers = chunkhandlersList
 	}
 
-	d.chunkHandlers = chunkhandlersList
-
-	for _, handler := range chunkhandlersList {
-		handler.Start()
+	for _, handler := range d.chunkHandlers {
+		handler.Start(d.url, &d.ticker, writer)
 	}
 
 	d.ticker.Start()
@@ -119,7 +112,7 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 		return [][]int64{{0, int64(size)}}
 	}
 
-	chunkSize := int(size / 10)
+	chunkSize := int(size / numberOfChuncks)
 
 	segmentsList := make([][]int64, 0)
 
@@ -128,7 +121,6 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 	}
 
 	return segmentsList
-
 }
 
 func getFileSize(url string) (int64, error) {
@@ -136,15 +128,6 @@ func getFileSize(url string) (int64, error) {
 }
 
 func (d *defaultDownloader) Pause() error {
-	// err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
-	// 	State: string(StatePaused),
-	// 	ID:    d.url, // Use the URL or ID as the key
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
-
 	// d.state = StatePaused
 	// d.ticker.Quite()
 
@@ -154,21 +137,12 @@ func (d *defaultDownloader) Pause() error {
 }
 
 func (d *defaultDownloader) Resume() error {
-	// err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
-	// 	State: string(StateDownloading),
-	// 	ID:    d.url, // Use the URL or ID as the key
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
 	// if d.hasStarted {
 	// 	d.state = StateDownloading
 	// 	d.ticker.Start()
 	// } else {
 	// 	d.Start()
 	// }
-
 
 	// چک کن اگر فلگ پاز ترو بود کاری بکنی
 	// اگر فلگ پاز فالس بود هیچ غلطی نباید این جا بکنی
@@ -177,44 +151,3 @@ func (d *defaultDownloader) Resume() error {
 	return nil
 }
 
-func (d *defaultDownloader) Cancel() error {
-	// err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
-	// 	State: string(StateCanceled),
-	// 	ID:    d.url, // Use the URL or ID as the key
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-
-	d.state = StateCanceled
-
-	return nil
-}
-
-func (d *defaultDownloader) Retry() error {
-	// err := d.queries.UpdateDownloadState(context.Background(), state.UpdateDownloadStateParams{
-	// 	State: string(StateDownloading),
-	// 	ID:    d.url, // Use the URL or ID as the key
-	// })
-
-	// if err != nil {
-	// 	return err
-	// }
-	return nil
-}
-
-func (d *defaultDownloader) Status() DownloadStatus {
-	// status, err := d.queries.GetDownloadStatus(context.Background(), d.url) // Use the URL or ID as the key
-	// if err != nil {
-	// 	return DownloadStatus{State: StateFailed}
-	// }
-
-	d.progressTrackingMutex.Lock()
-	fetchedRate := d.progressRate
-	d.progressTrackingMutex.Unlock()
-	return DownloadStatus{
-		ProgressPercentage: float32(d.progress) / float32(d.size) * 100,
-		Speed:              float32(fetchedRate),
-		State:              d.state,
-	}
-}
