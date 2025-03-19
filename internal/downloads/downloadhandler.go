@@ -6,6 +6,8 @@ import (
 )
 
 func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, ticker bandwidthlimit.Ticker) DownloadHandler {
+	pausedChan := make(chan int, 1)
+
 	defDow := defaultDownloader{
 		id:            downloadConfig.ID,
 		queueID:       downloadConfig.QueueID,
@@ -17,7 +19,11 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		progress:      0,
 		progressRate:  0,
 		size:          0,
+		pausedChan:    nil,
+		isPaused:      false,
 	}
+
+	defDow.pausedChan = &pausedChan
 
 	if len(downloadChuncks) == numberOfChuncks {
 		chunkhandlersList := make([]*DownloadChunkHandler, numberOfChuncks)
@@ -30,7 +36,7 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 				RangeEnd:       chunk.RangeEnd,
 				CurrentPointer: chunk.CurrentPointer,
 				DownloadID:     chunk.DownloadID,
-			},)
+			}, defDow.pausedChan)
 
 			chunkhandlersList[i] = &handler
 		}

@@ -27,6 +27,8 @@ type defaultDownloader struct {
 	progress      int64
 	progressRate  float64
 	size          int64
+	pausedChan    *chan int
+	isPaused      bool
 }
 
 func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
@@ -52,7 +54,10 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 }
 
 func (d *defaultDownloader) Start(_ context.Context) error {
-	d.hasStarted = true
+	if d.isPaused {
+		*d.pausedChan = make(chan int)
+	}
+
 	req, err := http.NewRequest("HEAD", d.url, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -80,7 +85,7 @@ func (d *defaultDownloader) Start(_ context.Context) error {
 				RangeEnd:       r,
 				CurrentPointer: l,
 				DownloadID:     d.id,
-			},)
+			}, d.pausedChan)
 
 			chunkhandlersList = append(chunkhandlersList, &handler)
 		}
@@ -123,31 +128,10 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 	return segmentsList
 }
 
-func getFileSize(url string) (int64, error) {
-	panic("unimplemented")
-}
-
 func (d *defaultDownloader) Pause() error {
-	// d.state = StatePaused
-	// d.ticker.Quite()
-
-	// فلگ فالس رو تورو کن
-	// فور بزن روی تمام چانک‌ها پازشون کن
+	if !d.isPaused {
+		close(*d.pausedChan)
+		d.isPaused = true
+	}
 	return nil
 }
-
-func (d *defaultDownloader) Resume() error {
-	// if d.hasStarted {
-	// 	d.state = StateDownloading
-	// 	d.ticker.Start()
-	// } else {
-	// 	d.Start()
-	// }
-
-	// چک کن اگر فلگ پاز ترو بود کاری بکنی
-	// اگر فلگ پاز فالس بود هیچ غلطی نباید این جا بکنی
-	// اگر فلگ ترو بود فور بزن روی تمام چانک‌ها ریزومشون کن
-
-	return nil
-}
-
