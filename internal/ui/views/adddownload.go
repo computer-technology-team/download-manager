@@ -1,4 +1,4 @@
-package panes
+package views
 
 import (
 	"errors"
@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
-	bubblestextinput "github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/samber/lo"
 
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/listinput"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/textinput"
@@ -28,28 +28,23 @@ var (
 
 func addDownloadCmd(url, queueName, fileName string) tea.Cmd {
 	return func() tea.Msg {
-		slog.Info("add download")
-		// TODO: connect this to queue manager
-		return types.AddDownloadMsg{
-			URL:       url,
-			QueueName: queueName,
-			FileName:  fileName,
-		}
+		slog.Info("add download", "url", url, "queue_name", queueName, "file_name", fileName)
+		return nil
 	}
 }
 
-type addDownloadPane struct {
+type addDownloadView struct {
 	inputs  []types.Input[string]
 	focused int
 	err     error
 }
 
-func (s addDownloadPane) FullHelp() [][]key.Binding {
+func (s addDownloadView) FullHelp() [][]key.Binding {
 	return [][]key.Binding{s.ShortHelp()}
 }
 
 // ShortHelp implements types.Pane.
-func (s addDownloadPane) ShortHelp() []key.Binding {
+func (s addDownloadView) ShortHelp() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("↓", "down"), key.WithHelp("↓", "next field")),
 		key.NewBinding(key.WithKeys("↑", "up"), key.WithHelp("↑", "previous field")),
@@ -58,11 +53,11 @@ func (s addDownloadPane) ShortHelp() []key.Binding {
 	}
 }
 
-func NewAddDownloadPane() Pane {
+func NewAddDownloadPane() types.View {
 	return initialModel()
 }
 
-func initialModel() addDownloadPane {
+func initialModel() addDownloadView {
 	inputsUrl := textinput.New()
 	inputsUrl.Placeholder = "https://example.com/"
 	inputsUrl.Focus()
@@ -79,8 +74,7 @@ func initialModel() addDownloadPane {
 		}
 		return nil
 	}
-	// inputs[exp].Validate = expValidator
-	// Queue name selection from available queues
+
 	inputsQueueName := listinput.New("Select The Queue", "queue", "queues")
 
 	inputsFileName := textinput.New()
@@ -93,18 +87,20 @@ func initialModel() addDownloadPane {
 	inputs[queueName] = inputsQueueName
 	inputs[fileName] = inputsFileName
 
-	return addDownloadPane{
+	return addDownloadView{
 		inputs:  inputs,
 		focused: 0,
 		err:     nil,
 	}
 }
 
-func (m addDownloadPane) Init() tea.Cmd {
-	return bubblestextinput.Blink
+func (m addDownloadView) Init() tea.Cmd {
+	return tea.Batch(lo.Map(m.inputs, func(in types.Input[string], _ int) tea.Cmd {
+		return in.Init()
+	})...)
 }
 
-func (m addDownloadPane) Update(msg tea.Msg) (Pane, tea.Cmd) {
+func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	cmds := make([]tea.Cmd, len(m.inputs))
 
 	switch msg := msg.(type) {
@@ -141,7 +137,7 @@ func (m addDownloadPane) Update(msg tea.Msg) (Pane, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m addDownloadPane) View() string {
+func (m addDownloadView) View() string {
 	var stringBuilder strings.Builder
 
 	stringBuilder.WriteString("Add Download\n\n")
@@ -192,11 +188,11 @@ func (m addDownloadPane) View() string {
 	return stringBuilder.String()
 }
 
-func (m *addDownloadPane) nextInput() {
+func (m *addDownloadView) nextInput() {
 	m.focused = (m.focused + 1) % len(m.inputs)
 }
 
-func (m *addDownloadPane) prevInput() {
+func (m *addDownloadView) prevInput() {
 	m.focused--
 	if m.focused < 0 {
 		m.focused = len(m.inputs) - 1

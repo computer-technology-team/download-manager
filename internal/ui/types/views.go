@@ -1,4 +1,4 @@
-package panes
+package types
 
 import (
 	"github.com/charmbracelet/bubbles/help"
@@ -6,9 +6,13 @@ import (
 )
 
 // Keeping the ELM structure whilst adding KeyMap
-type Pane interface {
+type View interface {
 	help.KeyMap
 	Init() tea.Cmd
-	Update(tea.Msg) (Pane, tea.Cmd)
+	Update(tea.Msg) (View, tea.Cmd)
+	View() string
+}
+
+type Viewable interface {
 	View() string
 }
