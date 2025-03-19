@@ -14,29 +14,28 @@ import (
 )
 
 type DownloadChunkHandler struct {
-	mainDownloadID string
+	mainDownloadID int64
 	chunckID       string
-	url            string	
 	rangeStart     int64
 	rangeEnd       int64
-	savePath       string
-	ticker         *bandwidthlimit.Ticker
 	currentPointer int64
-	syncWriter     SynchronizedFileWriter
-	// چنل ریزوم
+	pausedChan         *chan int
 }
 
-func NewDownloadChunkHandler(cfg state.DownloadChunk) DownloadChunkHandler {
-	return DownloadChunkHandler{
-		mainDownloadID: cfg.ID,
-		chunckID: 		cfg.downloadID,
-		rangeStart:     cfg.rangeStart,
-		rangeEnd:       cfg.rangeEnd,
-		currentPointer: cfg.currentPointer,
+func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) DownloadChunkHandler {
+	downChunk := DownloadChunkHandler{
+		mainDownloadID: cfg.DownloadID,
+		chunckID:       cfg.ID,
+		rangeStart:     cfg.RangeStart,
+		rangeEnd:       cfg.RangeEnd,
+		currentPointer: cfg.CurrentPointer,
 	}
+	downChunk.pausedChan = pausedChan
+	return downChunk
 }
+
 func (chunkHandler *DownloadChunkHandler) Start(url string, sharedTicker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter) {
-	go chunkHandler.start(url string, savePath string, sharedTicker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter)
+	go chunkHandler.start(url, sharedTicker, syncWriter)
 }
 
 func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter) {
@@ -48,12 +47,11 @@ func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlim
 	}
 
 	reader := sendRequest(url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd) // send get request
-	buffer := make([]byte, MaxpacketSize)
+	buffer := make([]byte, bandwidthlimit.MaxpacketSize)
 	for {
-		if puased {
-			// از روی چنل ریزوم بخون
-			// تا وقتی کسی چیزی روش ننوشته این جا گیر می‌کنه
-		}
+
+		<-*chunkHandler.pausedChan
+
 		ticker.GetToken()
 		fmt.Println(chunkHandler.rangeStart)
 		n, err := reader.Read(buffer)
@@ -72,16 +70,6 @@ func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlim
 		}
 	}
 }
-
-// func (chunkHandler *DownloadChunkHandler) Pause() {
-// 	// پاز رو تورو کن
-// 	// کاری دیگه؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟
-// }
-
-// func (chunkHandler *DownloadChunkHandler) Resume() {
-// 	// روی چنل رزوم بنویس
-// 	// پاز هم فالس کن
-// }
 
 func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) io.Reader { // send get and skip header
 	parsedURL, _ := url.Parse(requestURL)
