@@ -7,14 +7,172 @@ package state
 
 import (
 	"context"
+	"database/sql"
 )
 
-const getAllDownloads = `-- name: GetAllDownloads :many
+const createDownload = `-- name: CreateDownload :one
+INSERT INTO downloads (queue_id, url, save_path, state, retries)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, queue_id, url, save_path, state, retries
+`
+
+type CreateDownloadParams struct {
+	QueueID  int64
+	Url      string
+	SavePath string
+	State    string
+	Retries  sql.NullInt64
+}
+
+func (q *Queries) CreateDownload(ctx context.Context, arg CreateDownloadParams) (Download, error) {
+	row := q.db.QueryRowContext(ctx, createDownload,
+		arg.QueueID,
+		arg.Url,
+		arg.SavePath,
+		arg.State,
+		arg.Retries,
+	)
+	var i Download
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Url,
+		&i.SavePath,
+		&i.State,
+		&i.Retries,
+	)
+	return i, err
+}
+
+const createDownloadChunk = `-- name: CreateDownloadChunk :one
+INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, range_start, range_end, current_pointer, download_id
+`
+
+type CreateDownloadChunkParams struct {
+	ID             string
+	RangeStart     int64
+	RangeEnd       int64
+	CurrentPointer int64
+	DownloadID     int64
+}
+
+func (q *Queries) CreateDownloadChunk(ctx context.Context, arg CreateDownloadChunkParams) (DownloadChunk, error) {
+	row := q.db.QueryRowContext(ctx, createDownloadChunk,
+		arg.ID,
+		arg.RangeStart,
+		arg.RangeEnd,
+		arg.CurrentPointer,
+		arg.DownloadID,
+	)
+	var i DownloadChunk
+	err := row.Scan(
+		&i.ID,
+		&i.RangeStart,
+		&i.RangeEnd,
+		&i.CurrentPointer,
+		&i.DownloadID,
+	)
+	return i, err
+}
+
+const deleteDownload = `-- name: DeleteDownload :exec
+DELETE FROM downloads
+WHERE id = ?
+`
+
+func (q *Queries) DeleteDownload(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteDownload, id)
+	return err
+}
+
+const deleteDownloadChunk = `-- name: DeleteDownloadChunk :exec
+DELETE FROM download_chunks
+WHERE id = ?
+`
+
+func (q *Queries) DeleteDownloadChunk(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteDownloadChunk, id)
+	return err
+}
+
+const getDownload = `-- name: GetDownload :one
+SELECT id, queue_id, url, save_path, state, retries FROM downloads
+WHERE id = ?
+`
+
+func (q *Queries) GetDownload(ctx context.Context, id int64) (Download, error) {
+	row := q.db.QueryRowContext(ctx, getDownload, id)
+	var i Download
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Url,
+		&i.SavePath,
+		&i.State,
+		&i.Retries,
+	)
+	return i, err
+}
+
+const getDownloadChunk = `-- name: GetDownloadChunk :one
+SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
+WHERE id = ?
+`
+
+func (q *Queries) GetDownloadChunk(ctx context.Context, id string) (DownloadChunk, error) {
+	row := q.db.QueryRowContext(ctx, getDownloadChunk, id)
+	var i DownloadChunk
+	err := row.Scan(
+		&i.ID,
+		&i.RangeStart,
+		&i.RangeEnd,
+		&i.CurrentPointer,
+		&i.DownloadID,
+	)
+	return i, err
+}
+
+const listDownloadChunks = `-- name: ListDownloadChunks :many
+SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
+`
+
+func (q *Queries) ListDownloadChunks(ctx context.Context) ([]DownloadChunk, error) {
+	rows, err := q.db.QueryContext(ctx, listDownloadChunks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DownloadChunk
+	for rows.Next() {
+		var i DownloadChunk
+		if err := rows.Scan(
+			&i.ID,
+			&i.RangeStart,
+			&i.RangeEnd,
+			&i.CurrentPointer,
+			&i.DownloadID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDownloads = `-- name: ListDownloads :many
 SELECT id, queue_id, url, save_path, state, retries FROM downloads
 `
 
-func (q *Queries) GetAllDownloads(ctx context.Context) ([]Download, error) {
-	rows, err := q.db.QueryContext(ctx, getAllDownloads)
+func (q *Queries) ListDownloads(ctx context.Context) ([]Download, error) {
+	rows, err := q.db.QueryContext(ctx, listDownloads)
 	if err != nil {
 		return nil, err
 	}
@@ -41,4 +199,75 @@ func (q *Queries) GetAllDownloads(ctx context.Context) ([]Download, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateDownload = `-- name: UpdateDownload :one
+UPDATE downloads
+SET queue_id = ?, url = ?, save_path = ?, state = ?, retries = ?
+WHERE id = ?
+RETURNING id, queue_id, url, save_path, state, retries
+`
+
+type UpdateDownloadParams struct {
+	QueueID  int64
+	Url      string
+	SavePath string
+	State    string
+	Retries  sql.NullInt64
+	ID       int64
+}
+
+func (q *Queries) UpdateDownload(ctx context.Context, arg UpdateDownloadParams) (Download, error) {
+	row := q.db.QueryRowContext(ctx, updateDownload,
+		arg.QueueID,
+		arg.Url,
+		arg.SavePath,
+		arg.State,
+		arg.Retries,
+		arg.ID,
+	)
+	var i Download
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Url,
+		&i.SavePath,
+		&i.State,
+		&i.Retries,
+	)
+	return i, err
+}
+
+const updateDownloadChunk = `-- name: UpdateDownloadChunk :one
+UPDATE download_chunks
+SET range_start = ?, range_end = ?, current_pointer = ?, download_id = ?
+WHERE id = ?
+RETURNING id, range_start, range_end, current_pointer, download_id
+`
+
+type UpdateDownloadChunkParams struct {
+	RangeStart     int64
+	RangeEnd       int64
+	CurrentPointer int64
+	DownloadID     int64
+	ID             string
+}
+
+func (q *Queries) UpdateDownloadChunk(ctx context.Context, arg UpdateDownloadChunkParams) (DownloadChunk, error) {
+	row := q.db.QueryRowContext(ctx, updateDownloadChunk,
+		arg.RangeStart,
+		arg.RangeEnd,
+		arg.CurrentPointer,
+		arg.DownloadID,
+		arg.ID,
+	)
+	var i DownloadChunk
+	err := row.Scan(
+		&i.ID,
+		&i.RangeStart,
+		&i.RangeEnd,
+		&i.CurrentPointer,
+		&i.DownloadID,
+	)
+	return i, err
 }
