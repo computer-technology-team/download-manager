@@ -1,23 +1,81 @@
 package queues
 
-import "github.com/computer-technology-team/download-manager.git/internal/state"
+import (
+	"context"
+	"database/sql"
+
+	"github.com/computer-technology-team/download-manager.git/internal/state"
+)
 
 type QueueManager interface {
-	PauseDownload(id int64) error
-	ResumeDownload(id int64) error
-	RetryDownload(id int64) error
+	PauseDownload(ctx context.Context, id int64) error
+	ResumeDownload(ctx context.Context, id int64) error
+	RetryDownload(ctx context.Context, id int64) error
 
-	CreateDownload() error
-	ListDownloads() ([]state.Download, error)
-	DeleteDownload() error
+	CreateDownload(ctx context.Context) error
+	ListDownloads(ctx context.Context) ([]state.Download, error)
+	DeleteDownload(ctx context.Context) error
 
-	CreateQueue() error
-	DeleteQueue() error
-	ListQueue() ([]state.Queue, error)
-	EditQueue(id int64) error
+	CreateQueue(ctx context.Context) error
+	DeleteQueue(ctx context.Context) error
+	ListQueue(ctx context.Context) ([]state.Queue, error)
+	EditQueue(ctx context.Context, id int64) error
 }
 
-func New() QueueManager {
-	//do your init
-	return nil
+type queueManager struct {
+	queries *state.Queries
+}
+
+// CreateDownload implements QueueManager.
+func (q queueManager) CreateDownload(ctx context.Context) error {
+	panic("unimplemented")
+}
+
+// CreateQueue implements QueueManager.
+func (q queueManager) CreateQueue(ctx context.Context) error {
+	panic("unimplemented")
+}
+
+// DeleteDownload implements QueueManager.
+func (q queueManager) DeleteDownload(ctx context.Context) error {
+	panic("unimplemented")
+}
+
+// DeleteQueue implements QueueManager.
+func (q queueManager) DeleteQueue(ctx context.Context) error {
+	panic("unimplemented")
+}
+
+// EditQueue implements QueueManager.
+func (q queueManager) EditQueue(ctx context.Context, id int64) error {
+	panic("unimplemented")
+}
+
+// ListDownloads implements QueueManager.
+func (q queueManager) ListDownloads(ctx context.Context) ([]state.Download, error) {
+	panic("unimplemented")
+}
+
+// PauseDownload implements QueueManager.
+func (q queueManager) PauseDownload(ctx context.Context, id int64) error {
+	panic("unimplemented")
+}
+
+// ResumeDownload implements QueueManager.
+func (q queueManager) ResumeDownload(ctx context.Context, id int64) error {
+	panic("unimplemented")
+}
+
+// RetryDownload implements QueueManager.
+func (q queueManager) RetryDownload(ctx context.Context, id int64) error {
+	panic("unimplemented")
+}
+
+// ListQueue implements QueueManager.
+func (q queueManager) ListQueue(ctx context.Context) ([]state.Queue, error) {
+	return q.queries.ListQueues(ctx)
+}
+
+func New(db *sql.DB) QueueManager {
+	return queueManager{queries: state.New(db)}
 }
