@@ -15,14 +15,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/samber/lo"
 
-	"github.com/computer-technology-team/download-manager.git/internal/ui/panes"
+	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
 var fKeyPattern = regexp.MustCompile(`f(\d+)`)
 
 type Tab struct {
 	Name string
-	Pane panes.Pane
+	View types.View
 }
 
 type TabManager interface {
@@ -49,7 +49,9 @@ type model struct {
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(lo.Map(m.tabs, func(t Tab, _ int) tea.Cmd {
+		return t.View.Init()
+	})...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -58,9 +60,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.help.Width = msg.Width
 
+		newMsg := tea.WindowSizeMsg{Width: msg.Width - 2, Height: msg.Height - 10}
+
 		cmds := make([]tea.Cmd, len(m.tabs))
 		for i, t := range m.tabs {
-			m.tabs[i].Pane, cmds[i] = t.Pane.Update(msg)
+			m.tabs[i].View, cmds[i] = t.View.Update(newMsg)
 		}
 
 		return m, tea.Batch(cmds...)
@@ -95,7 +99,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var childCmd tea.Cmd
-	m.tabs[m.activeTab].Pane, childCmd = m.GetActiveTab().Pane.Update(msg)
+	m.tabs[m.activeTab].View, childCmd = m.GetActiveTab().View.Update(msg)
 
 	return m, childCmd
 }
@@ -147,7 +151,7 @@ func (m model) View() string {
 	doc.WriteString("\n")
 
 	// Render window content
-	windowContent := windowStyle.Width(m.width - 2).Render(m.GetActiveTab().Pane.View()) // -2 for borders
+	windowContent := windowStyle.Width(m.width - 2).Render(m.GetActiveTab().View.View()) // -2 for borders
 	doc.WriteString(windowContent)
 	doc.WriteString("\n")
 
@@ -172,11 +176,11 @@ func (k keymap) FullHelp() [][]key.Binding {
 }
 
 func (k keymap) getActiveTabShortHelp() []key.Binding {
-	return k.tabManager.GetActiveTab().Pane.ShortHelp()
+	return k.tabManager.GetActiveTab().View.ShortHelp()
 }
 
 func (k keymap) getActiveTabFullHelp() [][]key.Binding {
-	return k.tabManager.GetActiveTab().Pane.FullHelp()
+	return k.tabManager.GetActiveTab().View.FullHelp()
 }
 
 func initKeymap(tabs []Tab) keymap {

@@ -4,14 +4,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/tabs"
-	"github.com/computer-technology-team/download-manager.git/internal/ui/panes"
+	"github.com/computer-technology-team/download-manager.git/internal/ui/views"
 )
 
 func NewDownloadManagerProgram() *tea.Program {
 	tabsModel := tabs.New(1,
-		tabs.Tab{Name: "Add Download", Pane: panes.NewAddDownloadPane()},
-		tabs.Tab{Name: "Downloads List", Pane: panes.NewSamplePane("Downloads List")},
-		tabs.Tab{Name: "Queues List", Pane: panes.NewSamplePane("Queues List")},
+		tabs.Tab{Name: "Add Download", View: views.NewAddDownloadPane()},
+		tabs.Tab{Name: "Downloads List", View: views.NewDownloadsList()},
+		tabs.Tab{Name: "Queues List", View: views.NewQueuesList()},
 	)
 
 	return tea.NewProgram(tabsModel)

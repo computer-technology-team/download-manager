@@ -26,3 +26,6 @@ go.work.sum
 
 download-manager-cli
 download-manager.log
+
+.idea
+.vscode

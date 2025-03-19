@@ -1,6 +1,10 @@
 package listinput
 
 import (
+	"errors"
+	"strconv"
+
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -9,7 +13,8 @@ import (
 )
 
 var (
-	docStyle = lipgloss.NewStyle().Margin(1, 2)
+	ErrItemNotFound = errors.New("item not found")
+	docStyle        = lipgloss.NewStyle().Margin(1, 2)
 
 	// Style for the selected item when not focused
 	selectedItemStyle = lipgloss.NewStyle().
@@ -112,6 +117,25 @@ func (m model) View() string {
 	return docStyle.Render(m.list.View())
 }
 
+func (m model) ShortHelp() []key.Binding {
+	return m.list.ShortHelp()
+}
+
+func (m model) FullHelp() [][]key.Binding {
+	return m.list.FullHelp()
+}
+
+func (m *model) SetValue(id string) error {
+	for i, itemI := range m.list.Items() {
+		if strconv.Itoa(itemI.(item).id) == id {
+			m.list.Select(i)
+			return nil
+		}
+	}
+
+	return ErrItemNotFound
+}
+
 func New(title string, barItemNameSingular, barItemNamePlural string) *model {
 	// Create a delegate with custom styles
 	delegate := list.NewDefaultDelegate()
@@ -148,6 +172,7 @@ func New(title string, barItemNameSingular, barItemNamePlural string) *model {
 	listModel.SetStatusBarItemName(barItemNameSingular, barItemNamePlural)
 	listModel.SetShowStatusBar(true)
 	listModel.SetShowTitle(true)
+	listModel.SetShowHelp(false)
 
 	return &model{
 		list:  listModel,

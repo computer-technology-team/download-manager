@@ -1,33 +1,34 @@
-package panes
+package views
 
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/sampletext"
+	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
-type samplePane struct {
+type sampleView struct {
 	tea.Model
 }
 
-func (s samplePane) FullHelp() [][]key.Binding {
+func (s sampleView) FullHelp() [][]key.Binding {
 	return [][]key.Binding{s.ShortHelp()}
 }
 
 // ShortHelp implements types.Pane.
-func (s samplePane) ShortHelp() []key.Binding {
+func (s sampleView) ShortHelp() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithHelp("some key", "some help")),
 	}
 }
 
-func (s samplePane) Update(_ tea.Msg) (Pane, tea.Cmd) {
+func (s sampleView) Update(_ tea.Msg) (types.View, tea.Cmd) {
 	return s, nil
 }
 
-func NewSamplePane(s string) Pane {
-	return samplePane{
+func NewSampleView(s string) types.View {
+	return sampleView{
 		Model: sampletext.New(s),
 	}
 }
