@@ -10,9 +10,15 @@ WHERE id = ?;
 -- name: ListDownloads :many
 SELECT * FROM downloads;
 
--- name: UpdateDownload :one
+-- name: SetDownloadState :one
 UPDATE downloads
-SET queue_id = ?, url = ?, save_path = ?, state = ?, retries = ?
+SET state = ?
+WHERE id = ?
+RETURNING *;
+
+-- name: SetDownloadRetry :one
+UPDATE downloads
+SET retries = ?
 WHERE id = ?
 RETURNING *;
 
@@ -24,10 +30,7 @@ WHERE id = ?;
 INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
 VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE
-SET range_start = EXCLUDED.range_start,
-    range_end = EXCLUDED.range_end,
-    current_pointer = EXCLUDED.current_pointer,
-    download_id = EXCLUDED.download_id
+SET current_pointer = EXCLUDED.current_pointer
 RETURNING *;
 
 -- name: GetDownloadChunk :one
