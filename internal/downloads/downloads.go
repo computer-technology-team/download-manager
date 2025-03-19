@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
-	// "github.com/computer-technology-team/download-manager.git/internal/queues"
+	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/google/uuid"
 )
@@ -43,8 +43,10 @@ func (d *defaultDownloader) keepTrackOfProgress() {
 		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
 		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
 		d.progress = currentProgress
-
-		// queues.signal
+		events.GetChannel() <- events.Event{
+			EventType: events.DownloadProgressed,
+			Payload:   d.status(),
+		}
 	}
 }
 
@@ -57,9 +59,11 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 }
 
 func (d *defaultDownloader) Start(_ context.Context) error {
-	if d.isPaused {
+	if d.state == StatePaused {
 		*d.pausedChan = make(chan int)
 	}
+
+	d.state = StateInProgress
 
 	req, err := http.NewRequest("HEAD", d.url, nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -132,9 +136,23 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 }
 
 func (d *defaultDownloader) Pause() error {
-	if !d.isPaused {
+	if d.state == StateInProgress {
 		close(*d.pausedChan)
 		d.isPaused = true
+		d.state = StatePaused
 	}
 	return nil
+}
+
+func (d *defaultDownloader) Cancel() error {
+	// TODO DLELETE FILE
+}
+
+func (d *defaultDownloader) status() DownloadStatus {
+	return DownloadStatus{
+		ID: 				d.id,		
+		ProgressPercentage: float32(d.progress),
+		Speed:              float32(d.progressRate),
+		State:              d.state,
+	}
 }

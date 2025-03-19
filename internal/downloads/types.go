@@ -14,9 +14,11 @@ const (
 type DownloadHandler interface {
 	Start(ctx context.Context) error
 	Pause() error
+	Cancel() error
 }
 
 type DownloadStatus struct {
+	ID                 int64
 	ProgressPercentage float32
 	Speed              float32 // bytes per second
 	State              DownloadState
