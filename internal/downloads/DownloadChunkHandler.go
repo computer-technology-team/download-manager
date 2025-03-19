@@ -8,55 +8,53 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
+
+	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
+	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
 type DownloadChunkHandler struct {
-	url            string
+	mainDownloadID string
+	chunckID       string
+	url            string	
 	rangeStart     int64
 	rangeEnd       int64
 	savePath       string
-	bandwidthLimit int64
-	ticker         *Ticker
+	ticker         *bandwidthlimit.Ticker
 	currentPointer int64
 	syncWriter     SynchronizedFileWriter
-	progressMutex sync.Mutex
 	// چنل ریزوم
 }
 
-func NewDownloadChunkHandler(cfg DownloaderConfig, rangeL int64, rangeR int64, sharedTicker *Ticker, syncWriter SynchronizedFileWriter) DownloadChunkHandler {
+func NewDownloadChunkHandler(cfg state.DownloadChunk) DownloadChunkHandler {
 	return DownloadChunkHandler{
-		url:            cfg.URL,
-		rangeStart:     rangeL,
-		rangeEnd:       rangeR,
-		savePath:       cfg.SavePath,
-		bandwidthLimit: cfg.BandwidthLimitBytesPS,
-		ticker:         sharedTicker,
-		currentPointer: rangeL,
-		syncWriter:     syncWriter,
-		progressMutex: sync.Mutex{},
+		mainDownloadID: cfg.ID,
+		chunckID: 		cfg.downloadID,
+		rangeStart:     cfg.rangeStart,
+		rangeEnd:       cfg.rangeEnd,
+		currentPointer: cfg.currentPointer,
 	}
 }
-func (chunkHandler *DownloadChunkHandler) Start() {
-	go chunkHandler.start()
+func (chunkHandler *DownloadChunkHandler) Start(url string, sharedTicker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter) {
+	go chunkHandler.start(url string, savePath string, sharedTicker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter)
 }
 
-func (chunkHandler *DownloadChunkHandler) start() {
+func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter) {
 
-	conn, err := getConn(chunkHandler.url) // connect to the proper host with the correct protocol
+	conn, err := getConn(url) // connect to the proper host with the correct protocol
 	if err != nil {
 		fmt.Println("error in starting connection: ", err)
 		//TODO handle error
 	}
 
-	reader := sendRequest(chunkHandler.url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd) // send get request
+	reader := sendRequest(url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd) // send get request
 	buffer := make([]byte, MaxpacketSize)
 	for {
 		if puased {
 			// از روی چنل ریزوم بخون
 			// تا وقتی کسی چیزی روش ننوشته این جا گیر می‌کنه
 		}
-		chunkHandler.ticker.GetToken()
+		ticker.GetToken()
 		fmt.Println(chunkHandler.rangeStart)
 		n, err := reader.Read(buffer)
 		if err != nil && err != io.EOF {
@@ -65,11 +63,9 @@ func (chunkHandler *DownloadChunkHandler) start() {
 		}
 		n = int(min(int64(n), chunkHandler.rangeEnd-chunkHandler.currentPointer))
 
-		chunkHandler.syncWriter.Write(buffer, chunkHandler.currentPointer, int64(n))
-		
-		// chunkHandler.progressMutex.Lock()
+		syncWriter.Write(buffer, chunkHandler.currentPointer, int64(n))
+
 		chunkHandler.currentPointer += int64(n)
-		// chunkHandler.progressMutex.Unlock()
 
 		if chunkHandler.currentPointer == chunkHandler.rangeEnd {
 			break // TODO free wait list
@@ -77,19 +73,19 @@ func (chunkHandler *DownloadChunkHandler) start() {
 	}
 }
 
-func (chunkHandler *DownloadChunkHandler) Pause() {
-	// پاز رو تورو کن
-	// کاری دیگه؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟
-}
+// func (chunkHandler *DownloadChunkHandler) Pause() {
+// 	// پاز رو تورو کن
+// 	// کاری دیگه؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟؟
+// }
 
-func (chunkHandler *DownloadChunkHandler) Resume() {
-	// روی چنل رزوم بنویس
-	// پاز هم فالس کن
-}
+// func (chunkHandler *DownloadChunkHandler) Resume() {
+// 	// روی چنل رزوم بنویس
+// 	// پاز هم فالس کن
+// }
 
 func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) io.Reader { // send get and skip header
 	parsedURL, _ := url.Parse(requestURL)
-	
+
 	request := fmt.Sprintf("GET %s HTTP/1.1\r\n"+
 		"Host: %s\r\n"+
 		"Range: bytes=%d-%d\r\n"+
@@ -108,7 +104,7 @@ func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) i
 
 func getConn(requestURL string) (net.Conn, error) {
 	parsedURL, _ := url.Parse(requestURL) // TODO handle error
-	
+
 	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:443", parsedURL.Host))
 	// if err != nil {
 	// 	return nil, err
@@ -123,25 +119,22 @@ func getConn(requestURL string) (net.Conn, error) {
 	// 	fmt.Println("TLS handshake failed:", err) //
 	// }
 
-	tlsConn, err := tls.Dial("tcp",parsedURL.Host+":443", &tls.Config{
-		InsecureSkipVerify: true, 
+	tlsConn, err := tls.Dial("tcp", parsedURL.Host+":443", &tls.Config{
+		InsecureSkipVerify: true,
 	})
 
 	if err == nil {
-		return tlsConn,nil
+		return tlsConn, nil
 	}
 
-	conn,err := net.Dial("tcp",parsedURL.Host+":80")
-	if err == nil{
+	conn, err := net.Dial("tcp", parsedURL.Host+":80")
+	if err == nil {
 		return conn, nil
 	}
-
 
 	return nil, err // failed to connect to either 443 or 80
 }
 
 func (DownloadHandler *DownloadChunkHandler) getRemaining() int64 {
-	// DownloadHandler.progressMutex.Lock()
-	// defer DownloadHandler.progressMutex.Unlock()
 	return DownloadHandler.rangeEnd - DownloadHandler.currentPointer
 }
