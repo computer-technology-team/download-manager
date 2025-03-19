@@ -10,7 +10,7 @@ CREATE TABLE downloads (
 );
 
 CREATE TABLE download_chunks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     range_start INTEGER NOT NULL,
     range_end INTEGER NOT NULL,
     current_pointer INTEGER NOT NULL,

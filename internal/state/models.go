@@ -18,7 +18,7 @@ type Download struct {
 }
 
 type DownloadChunk struct {
-	ID             int64
+	ID             string
 	RangeStart     int64
 	RangeEnd       int64
 	CurrentPointer int64
