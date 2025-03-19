@@ -20,9 +20,15 @@ RETURNING *;
 DELETE FROM downloads
 WHERE id = ?;
 
--- name: CreateDownloadChunk :one
-INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
-VALUES (?, ?, ?, ?, ?)
+-- name: UpsertDownload :one
+INSERT INTO downloads (id, queue_id, url, save_path, state, retries)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE
+SET queue_id = EXCLUDED.queue_id,
+    url = EXCLUDED.url,
+    save_path = EXCLUDED.save_path,
+    state = EXCLUDED.state,
+    retries = EXCLUDED.retries
 RETURNING *;
 
 -- name: GetDownloadChunk :one
@@ -32,12 +38,10 @@ WHERE id = ?;
 -- name: ListDownloadChunks :many
 SELECT * FROM download_chunks;
 
--- name: UpdateDownloadChunk :one
-UPDATE download_chunks
-SET range_start = ?, range_end = ?, current_pointer = ?, download_id = ?
-WHERE id = ?
-RETURNING *;
-
 -- name: DeleteDownloadChunk :exec
 DELETE FROM download_chunks
 WHERE id = ?;
+
+-- name: GetDownloadChunksByDownloadID :many
+SELECT * FROM download_chunks
+WHERE download_id = ?;
