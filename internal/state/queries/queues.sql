@@ -12,7 +12,7 @@ SELECT * FROM queues;
 
 -- name: UpdateQueue :one
 UPDATE queues
-SET name = ?, directory = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?
+SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?
 WHERE id = ?
 RETURNING *;
 
