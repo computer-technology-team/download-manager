@@ -44,39 +44,6 @@ func (q *Queries) CreateDownload(ctx context.Context, arg CreateDownloadParams) 
 	return i, err
 }
 
-const createDownloadChunk = `-- name: CreateDownloadChunk :one
-INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
-VALUES (?, ?, ?, ?, ?)
-RETURNING id, range_start, range_end, current_pointer, download_id
-`
-
-type CreateDownloadChunkParams struct {
-	ID             string
-	RangeStart     int64
-	RangeEnd       int64
-	CurrentPointer int64
-	DownloadID     int64
-}
-
-func (q *Queries) CreateDownloadChunk(ctx context.Context, arg CreateDownloadChunkParams) (DownloadChunk, error) {
-	row := q.db.QueryRowContext(ctx, createDownloadChunk,
-		arg.ID,
-		arg.RangeStart,
-		arg.RangeEnd,
-		arg.CurrentPointer,
-		arg.DownloadID,
-	)
-	var i DownloadChunk
-	err := row.Scan(
-		&i.ID,
-		&i.RangeStart,
-		&i.RangeEnd,
-		&i.CurrentPointer,
-		&i.DownloadID,
-	)
-	return i, err
-}
-
 const deleteDownload = `-- name: DeleteDownload :exec
 DELETE FROM downloads
 WHERE id = ?
@@ -132,6 +99,40 @@ func (q *Queries) GetDownloadChunk(ctx context.Context, id string) (DownloadChun
 		&i.DownloadID,
 	)
 	return i, err
+}
+
+const getDownloadChunksByDownloadID = `-- name: GetDownloadChunksByDownloadID :many
+SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
+WHERE download_id = ?
+`
+
+func (q *Queries) GetDownloadChunksByDownloadID(ctx context.Context, downloadID int64) ([]DownloadChunk, error) {
+	rows, err := q.db.QueryContext(ctx, getDownloadChunksByDownloadID, downloadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DownloadChunk
+	for rows.Next() {
+		var i DownloadChunk
+		if err := rows.Scan(
+			&i.ID,
+			&i.RangeStart,
+			&i.RangeEnd,
+			&i.CurrentPointer,
+			&i.DownloadID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDownloadChunks = `-- name: ListDownloadChunks :many
@@ -201,31 +202,20 @@ func (q *Queries) ListDownloads(ctx context.Context) ([]Download, error) {
 	return items, nil
 }
 
-const updateDownload = `-- name: UpdateDownload :one
+const setDownloadRetry = `-- name: SetDownloadRetry :one
 UPDATE downloads
-SET queue_id = ?, url = ?, save_path = ?, state = ?, retries = ?
+SET retries = ?
 WHERE id = ?
 RETURNING id, queue_id, url, save_path, state, retries
 `
 
-type UpdateDownloadParams struct {
-	QueueID  int64
-	Url      string
-	SavePath string
-	State    string
-	Retries  sql.NullInt64
-	ID       int64
+type SetDownloadRetryParams struct {
+	Retries sql.NullInt64
+	ID      int64
 }
 
-func (q *Queries) UpdateDownload(ctx context.Context, arg UpdateDownloadParams) (Download, error) {
-	row := q.db.QueryRowContext(ctx, updateDownload,
-		arg.QueueID,
-		arg.Url,
-		arg.SavePath,
-		arg.State,
-		arg.Retries,
-		arg.ID,
-	)
+func (q *Queries) SetDownloadRetry(ctx context.Context, arg SetDownloadRetryParams) (Download, error) {
+	row := q.db.QueryRowContext(ctx, setDownloadRetry, arg.Retries, arg.ID)
 	var i Download
 	err := row.Scan(
 		&i.ID,
@@ -238,28 +228,55 @@ func (q *Queries) UpdateDownload(ctx context.Context, arg UpdateDownloadParams) 
 	return i, err
 }
 
-const updateDownloadChunk = `-- name: UpdateDownloadChunk :one
-UPDATE download_chunks
-SET range_start = ?, range_end = ?, current_pointer = ?, download_id = ?
+const setDownloadState = `-- name: SetDownloadState :one
+UPDATE downloads
+SET state = ?
 WHERE id = ?
+RETURNING id, queue_id, url, save_path, state, retries
+`
+
+type SetDownloadStateParams struct {
+	State string
+	ID    int64
+}
+
+func (q *Queries) SetDownloadState(ctx context.Context, arg SetDownloadStateParams) (Download, error) {
+	row := q.db.QueryRowContext(ctx, setDownloadState, arg.State, arg.ID)
+	var i Download
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Url,
+		&i.SavePath,
+		&i.State,
+		&i.Retries,
+	)
+	return i, err
+}
+
+const upsertDownloadChunk = `-- name: UpsertDownloadChunk :one
+INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (id) DO UPDATE
+SET current_pointer = EXCLUDED.current_pointer
 RETURNING id, range_start, range_end, current_pointer, download_id
 `
 
-type UpdateDownloadChunkParams struct {
+type UpsertDownloadChunkParams struct {
+	ID             string
 	RangeStart     int64
 	RangeEnd       int64
 	CurrentPointer int64
 	DownloadID     int64
-	ID             string
 }
 
-func (q *Queries) UpdateDownloadChunk(ctx context.Context, arg UpdateDownloadChunkParams) (DownloadChunk, error) {
-	row := q.db.QueryRowContext(ctx, updateDownloadChunk,
+func (q *Queries) UpsertDownloadChunk(ctx context.Context, arg UpsertDownloadChunkParams) (DownloadChunk, error) {
+	row := q.db.QueryRowContext(ctx, upsertDownloadChunk,
+		arg.ID,
 		arg.RangeStart,
 		arg.RangeEnd,
 		arg.CurrentPointer,
 		arg.DownloadID,
-		arg.ID,
 	)
 	var i DownloadChunk
 	err := row.Scan(

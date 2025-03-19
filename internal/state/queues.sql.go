@@ -114,14 +114,13 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 
 const updateQueue = `-- name: UpdateQueue :one
 UPDATE queues
-SET name = ?, directory = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?
+SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?
 WHERE id = ?
 RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit
 `
 
 type UpdateQueueParams struct {
 	Name          string
-	Directory     string
 	MaxBandwidth  sql.NullInt64
 	StartDownload string
 	EndDownload   string
@@ -132,7 +131,6 @@ type UpdateQueueParams struct {
 func (q *Queries) UpdateQueue(ctx context.Context, arg UpdateQueueParams) (Queue, error) {
 	row := q.db.QueryRowContext(ctx, updateQueue,
 		arg.Name,
-		arg.Directory,
 		arg.MaxBandwidth,
 		arg.StartDownload,
 		arg.EndDownload,
