@@ -47,3 +47,8 @@ WHERE id = ?;
 -- name: GetDownloadChunksByDownloadID :many
 SELECT * FROM download_chunks
 WHERE download_id = ?;
+
+-- name: GetPausedDownloadByQueueID :one
+SELECT * FROM downloads
+WHERE queue_id = ? AND state = 'PAUSED'
+LIMIT 1;

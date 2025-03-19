@@ -135,6 +135,26 @@ func (q *Queries) GetDownloadChunksByDownloadID(ctx context.Context, downloadID 
 	return items, nil
 }
 
+const getPausedDownloadByQueueID = `-- name: GetPausedDownloadByQueueID :one
+SELECT id, queue_id, url, save_path, state, retries FROM downloads
+WHERE queue_id = ? AND state = 'PAUSED'
+LIMIT 1
+`
+
+func (q *Queries) GetPausedDownloadByQueueID(ctx context.Context, queueID int64) (Download, error) {
+	row := q.db.QueryRowContext(ctx, getPausedDownloadByQueueID, queueID)
+	var i Download
+	err := row.Scan(
+		&i.ID,
+		&i.QueueID,
+		&i.Url,
+		&i.SavePath,
+		&i.State,
+		&i.Retries,
+	)
+	return i, err
+}
+
 const listDownloadChunks = `-- name: ListDownloadChunks :many
 SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
 `
