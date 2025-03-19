@@ -31,10 +31,24 @@ func (t *Ticker) SetBandwidth(BandwidthLimitBytesPS int64) {
 	t.tickerDelay = float64(MaxpacketSize) / float64(BandwidthLimitBytesPS)
 	t.mutex.Unlock()
 }
+
+func (t *Ticker) generate() {
+	ticker := time.Tick(time.Duration(t.tickerDelay) * time.Second)
+	for {
+		select {
+		case <-t.generationQuiteChan:
+			return
+		case <-ticker:
+			t.tokens <- 0
+		}
+	}
+}
+
 func (t *Ticker) generate() {
 	for {
 		select {
 		case <-t.generationQuiteChan:
+			close(t.tokens)
 			return
 		default:
 			fmt.Println("ticker delay: ", t.tickerDelay)

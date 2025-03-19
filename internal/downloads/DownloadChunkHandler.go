@@ -67,9 +67,9 @@ func (chunkHandler *DownloadChunkHandler) start() {
 
 		chunkHandler.syncWriter.Write(buffer, chunkHandler.currentPointer, int64(n))
 		
-		chunkHandler.progressMutex.Lock()
+		// chunkHandler.progressMutex.Lock()
 		chunkHandler.currentPointer += int64(n)
-		chunkHandler.progressMutex.Unlock()
+		// chunkHandler.progressMutex.Unlock()
 
 		if chunkHandler.currentPointer == chunkHandler.rangeEnd {
 			break // TODO free wait list
@@ -141,7 +141,7 @@ func getConn(requestURL string) (net.Conn, error) {
 }
 
 func (DownloadHandler *DownloadChunkHandler) getRemaining() int64 {
-	DownloadHandler.progressMutex.Lock()
-	defer DownloadHandler.progressMutex.Unlock()
+	// DownloadHandler.progressMutex.Lock()
+	// defer DownloadHandler.progressMutex.Unlock()
 	return DownloadHandler.rangeEnd - DownloadHandler.currentPointer
 }
