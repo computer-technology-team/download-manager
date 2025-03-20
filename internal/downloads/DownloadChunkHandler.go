@@ -53,7 +53,7 @@ func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlim
 		<-*chunkHandler.pausedChan
 
 		ticker.GetToken()
-		fmt.Println(chunkHandler.rangeStart)
+		// fmt.Println(chunkHandler.rangeStart)
 		n, err := reader.Read(buffer)
 		if err != nil && err != io.EOF {
 			fmt.Println("Error reading:", err) //TODO

@@ -20,6 +20,9 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		progressRate:  0,
 		size:          0,
 		pausedChan:    nil,
+		ctx:           nil,
+		ctxCancel:     nil,
+		writer:        NewSynchronizedFileWriter(downloadConfig.SavePath),
 	}
 
 	defDow.pausedChan = &pausedChan

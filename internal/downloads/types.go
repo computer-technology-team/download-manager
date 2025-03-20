@@ -1,7 +1,5 @@
 package downloads
 
-import "context"
-
 type DownloadState string
 
 const (
@@ -12,7 +10,7 @@ const (
 )
 
 type DownloadHandler interface {
-	Start(ctx context.Context) error
+	Start() error
 	Pause() error
 	Cancel() error
 }

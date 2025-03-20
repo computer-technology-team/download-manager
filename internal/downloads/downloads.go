@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -29,6 +31,9 @@ type defaultDownloader struct {
 	progressRate  float64
 	size          int64
 	pausedChan    *chan int
+	ctx           context.Context
+	ctxCancel     context.CancelFunc
+	writer        SynchronizedFileWriter
 }
 
 func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
@@ -37,14 +42,18 @@ func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
 
 func (d *defaultDownloader) keepTrackOfProgress() {
 	for {
-		time.Sleep(time.Duration(progressUpdatePeriod))
-		currentProgress := d.getTotalProgress()
-		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
-		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
-		d.progress = currentProgress
-		events.GetChannel() <- events.Event{
-			EventType: events.DownloadProgressed,
-			Payload:   d.status(),
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-time.After(time.Duration(progressUpdatePeriod)):
+			currentProgress := d.getTotalProgress()
+			newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
+			d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
+			d.progress = currentProgress
+			events.GetChannel() <- events.Event{
+				EventType: events.DownloadProgressed,
+				Payload:   d.status(),
+			}
 		}
 	}
 }
@@ -57,12 +66,13 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 	return d.size - total
 }
 
-func (d *defaultDownloader) Start(_ context.Context) error {
+func (d *defaultDownloader) Start() error {
 	if d.state == StatePaused {
 		*d.pausedChan = make(chan int)
 	}
 
 	d.state = StateInProgress
+	d.ctx, d.ctxCancel = context.WithCancel(context.Background())
 
 	req, err := http.NewRequest("HEAD", d.url, nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -70,13 +80,14 @@ func (d *defaultDownloader) Start(_ context.Context) error {
 		fmt.Println("Error in requesting header: ", err)
 		// TODO log.Fatal(err)
 	}
-	for k, vs := range resp.Header { // TODO test if
-		fmt.Printf("%s: %d, %+v\n", k, len(vs), vs)
-	}
+
+	// for k, vs := range resp.Header { // TODO test if
+	// 	fmt.Printf("%s: %d, %+v\n", k, len(vs), vs)
+	// }
 
 	d.url = resp.Request.URL.String()
 
-	writer := NewSynchronizedFileWriter(d.savePath)
+	d.writer = NewSynchronizedFileWriter(d.savePath)
 	segmentsList := d.getChunkSegments(resp.Header)
 
 	if len(d.chunkHandlers) != numberOfChuncks {
@@ -100,7 +111,7 @@ func (d *defaultDownloader) Start(_ context.Context) error {
 	}
 
 	for _, handler := range d.chunkHandlers {
-		handler.Start(d.url, &d.ticker, writer)
+		handler.Start(d.url, &d.ticker, d.writer)
 	}
 
 	d.ticker.Start()
@@ -138,12 +149,28 @@ func (d *defaultDownloader) Pause() error {
 	if d.state == StateInProgress {
 		close(*d.pausedChan)
 		d.state = StatePaused
+		d.writer.Close()
 	}
 	return nil
 }
 
 func (d *defaultDownloader) Cancel() error {
-	// TODO DLELETE FILE
+	d.Pause()
+
+	if d.ctxCancel != nil {
+		d.ctxCancel()
+	}
+
+	path, _ := filepath.Abs(d.savePath)
+
+	if path != "" {
+		if err := os.Remove(path); err != nil {
+			fmt.Println("couldn't delete")
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (d *defaultDownloader) status() DownloadStatus {

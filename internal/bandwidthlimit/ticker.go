@@ -1,7 +1,6 @@
 package bandwidthlimit
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -37,7 +36,6 @@ func (t *Ticker) generate() {
 		case <-t.generationQuiteChan:
 			return
 		default:
-			fmt.Println("ticker delay: ", t.tickerDelay)
 			t.tokens <- 0
 			time.Sleep(time.Second * time.Duration(t.tickerDelay))
 		}
