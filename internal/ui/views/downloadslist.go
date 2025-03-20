@@ -1,10 +1,13 @@
 package views
 
 import (
+	"context"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
@@ -27,6 +30,8 @@ type downloadsListView struct {
 	height     int
 
 	downloads []state.Download
+
+	queueManager queues.QueueManager
 }
 
 func (m *downloadsListView) updateColumnWidths() {
@@ -76,7 +81,12 @@ func (m downloadsListView) View() string {
 	return m.tableModel.View()
 }
 
-func NewDownloadsList() types.View {
+func NewDownloadsList(ctx context.Context, queueManager queues.QueueManager) (types.View, error) {
+	downloads, err := queueManager.ListDownloads(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	rows := []table.Row{
 		{"url1", "queue1", "progress1"},
 		{"url2", "queue2", "progress2"},
@@ -91,6 +101,9 @@ func NewDownloadsList() types.View {
 	)
 
 	return downloadsListView{
-		tableModel: t,
-	}
+		tableModel:   t,
+		queueManager: queueManager,
+
+		downloads: downloads,
+	}, nil
 }

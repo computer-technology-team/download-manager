@@ -1,6 +1,7 @@
 package views
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/queues"
+	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/listinput"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/textinput"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
@@ -37,6 +40,10 @@ type addDownloadView struct {
 	inputs  []types.Input[string]
 	focused int
 	err     error
+
+	queues []state.Queue
+
+	queueManager queues.QueueManager
 }
 
 func (s addDownloadView) FullHelp() [][]key.Binding {
@@ -53,11 +60,16 @@ func (s addDownloadView) ShortHelp() []key.Binding {
 	}
 }
 
-func NewAddDownloadPane() types.View {
-	return initialModel()
+func NewAddDownloadPane(ctx context.Context, queueManager queues.QueueManager) types.View {
+	return initialModel(ctx, queueManager)
 }
 
-func initialModel() addDownloadView {
+func initialModel(ctx context.Context, queueManager queues.QueueManager) (types.View, error) {
+	queues, err := queueManager.ListQueue(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	inputsUrl := textinput.New()
 	inputsUrl.Placeholder = "https://example.com/"
 	inputsUrl.Focus()
@@ -91,7 +103,11 @@ func initialModel() addDownloadView {
 		inputs:  inputs,
 		focused: 0,
 		err:     nil,
-	}
+
+		queues: queues,
+
+		queueManager: queueManager,
+	}, nil
 }
 
 func (m addDownloadView) Init() tea.Cmd {

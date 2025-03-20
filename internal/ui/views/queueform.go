@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/buttonrow"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/counterinput"
@@ -58,6 +59,8 @@ type queueForm struct {
 
 	focus queueFormInputIndex
 	err   error
+
+	queueManager queues.QueueManager
 }
 
 type button struct {
@@ -349,7 +352,7 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 	return v, tea.Batch(cmds...)
 }
 
-func NewQueueCreateForm() *queueForm {
+func NewQueueCreateForm(queueManager queues.QueueManager) *queueForm {
 	nameInput := textinput.New()
 	nameInput.Placeholder = "Enter queue name"
 	nameInput.Focus()
@@ -385,6 +388,8 @@ func NewQueueCreateForm() *queueForm {
 		endTime:               endTimeInput,
 		submit:                buttonRow,
 		focus:                 name,
+
+		queueManager: queueManager,
 	}
 
 	qfv.updateFocus()
@@ -392,7 +397,7 @@ func NewQueueCreateForm() *queueForm {
 	return qfv
 }
 
-func NewQueueEditForm(queue state.Queue) (*queueForm, error) {
+func NewQueueEditForm(queue state.Queue, queueManager queues.QueueManager) (*queueForm, error) {
 	var err error
 
 	nameInput := textinput.New()
@@ -450,6 +455,8 @@ func NewQueueEditForm(queue state.Queue) (*queueForm, error) {
 		submit:                buttonRow,
 		focus:                 name,
 		queueID:               &queue.ID,
+
+		queueManager: queueManager,
 	}
 
 	qfv.updateFocus()
