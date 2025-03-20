@@ -27,7 +27,12 @@ func NewRootCmd() *cobra.Command {
 
 			queueManager := queues.New(db)
 
-			_, err = ui.NewDownloadManagerProgram(queueManager).Run()
+			teaProgram, err := ui.NewDownloadManagerProgram(ctx, queueManager)
+			if err != nil {
+				return err
+			}
+
+			_, err = teaProgram.Run()
 			return err
 		},
 	}

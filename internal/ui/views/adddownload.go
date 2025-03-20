@@ -60,7 +60,7 @@ func (s addDownloadView) ShortHelp() []key.Binding {
 	}
 }
 
-func NewAddDownloadPane(ctx context.Context, queueManager queues.QueueManager) types.View {
+func NewAddDownloadPane(ctx context.Context, queueManager queues.QueueManager) (types.View, error) {
 	return initialModel(ctx, queueManager)
 }
 
