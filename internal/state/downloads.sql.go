@@ -7,7 +7,6 @@ package state
 
 import (
 	"context"
-	"database/sql"
 )
 
 const createDownload = `-- name: CreateDownload :one
@@ -21,7 +20,7 @@ type CreateDownloadParams struct {
 	Url      string
 	SavePath string
 	State    string
-	Retries  sql.NullInt64
+	Retries  int64
 }
 
 func (q *Queries) CreateDownload(ctx context.Context, arg CreateDownloadParams) (Download, error) {
@@ -189,7 +188,8 @@ func (q *Queries) ListDownloadChunks(ctx context.Context) ([]DownloadChunk, erro
 }
 
 const listDownloads = `-- name: ListDownloads :many
-SELECT id, queue_id, url, save_path, state, retries FROM downloads
+SELECT id, queue_id, url, save_path, state, retries 
+FROM downloads
 `
 
 func (q *Queries) ListDownloads(ctx context.Context) ([]Download, error) {
@@ -222,6 +222,52 @@ func (q *Queries) ListDownloads(ctx context.Context) ([]Download, error) {
 	return items, nil
 }
 
+const listDownloadsWithQueueName = `-- name: ListDownloadsWithQueueName :many
+SELECT downloads.id, downloads.queue_id, downloads.url, downloads.save_path, downloads.state, downloads.retries, queues.name as queue_name
+FROM downloads JOIN queues on downloads.queue_id = queues.id
+`
+
+type ListDownloadsWithQueueNameRow struct {
+	ID        int64
+	QueueID   int64
+	Url       string
+	SavePath  string
+	State     string
+	Retries   int64
+	QueueName string
+}
+
+func (q *Queries) ListDownloadsWithQueueName(ctx context.Context) ([]ListDownloadsWithQueueNameRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDownloadsWithQueueName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDownloadsWithQueueNameRow
+	for rows.Next() {
+		var i ListDownloadsWithQueueNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.QueueID,
+			&i.Url,
+			&i.SavePath,
+			&i.State,
+			&i.Retries,
+			&i.QueueName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setDownloadRetry = `-- name: SetDownloadRetry :one
 UPDATE downloads
 SET retries = ?
@@ -230,7 +276,7 @@ RETURNING id, queue_id, url, save_path, state, retries
 `
 
 type SetDownloadRetryParams struct {
-	Retries sql.NullInt64
+	Retries int64
 	ID      int64
 }
 

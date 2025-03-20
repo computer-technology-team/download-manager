@@ -29,7 +29,7 @@ type downloadsListView struct {
 	width      int
 	height     int
 
-	downloads []state.Download
+	downloads []state.ListDownloadsWithQueueNameRow
 
 	queueManager queues.QueueManager
 }
@@ -82,7 +82,7 @@ func (m downloadsListView) View() string {
 }
 
 func NewDownloadsList(ctx context.Context, queueManager queues.QueueManager) (types.View, error) {
-	downloads, err := queueManager.ListDownloads(ctx)
+	downloads, err := queueManager.ListDownloadsWithQueueName(ctx)
 	if err != nil {
 		return nil, err
 	}

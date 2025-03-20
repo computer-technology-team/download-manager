@@ -7,8 +7,13 @@ RETURNING *;
 SELECT * FROM downloads
 WHERE id = ?;
 
+-- name: ListDownloadsWithQueueName :many
+SELECT downloads.*, queues.name as queue_name
+FROM downloads JOIN queues on downloads.queue_id = queues.id;
+
 -- name: ListDownloads :many
-SELECT * FROM downloads;
+SELECT * 
+FROM downloads;
 
 -- name: SetDownloadState :one
 UPDATE downloads

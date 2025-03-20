@@ -14,7 +14,7 @@ type QueueManager interface {
 	RetryDownload(ctx context.Context, id int64) error
 
 	CreateDownload(ctx context.Context) error
-	ListDownloads(ctx context.Context) ([]state.Download, error)
+	ListDownloadsWithQueueName(ctx context.Context) ([]state.ListDownloadsWithQueueNameRow, error)
 	DeleteDownload(ctx context.Context, id int64) error
 
 	CreateQueue(ctx context.Context) error
@@ -65,8 +65,8 @@ func (q queueManager) EditQueue(ctx context.Context, id int64, arg state.UpdateQ
 	return nil
 }
 
-func (q queueManager) ListDownloads(ctx context.Context) ([]state.Download, error) {
-	return q.queries.ListDownloads(ctx)
+func (q queueManager) ListDownloadsWithQueueName(ctx context.Context) ([]state.ListDownloadsWithQueueNameRow, error) {
+	return q.queries.ListDownloadsWithQueueName(ctx)
 }
 
 // PauseDownload implements QueueManager.

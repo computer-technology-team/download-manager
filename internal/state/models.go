@@ -6,6 +6,7 @@ package state
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Download struct {
@@ -14,7 +15,7 @@ type Download struct {
 	Url      string
 	SavePath string
 	State    string
-	Retries  sql.NullInt64
+	Retries  int64
 }
 
 type DownloadChunk struct {
@@ -30,7 +31,8 @@ type Queue struct {
 	Name          string
 	Directory     string
 	MaxBandwidth  sql.NullInt64
-	StartDownload string
-	EndDownload   string
+	StartDownload time.Time
+	EndDownload   time.Time
 	RetryLimit    int64
+	ScheduleMode  bool
 }
