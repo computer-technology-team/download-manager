@@ -29,7 +29,6 @@ type defaultDownloader struct {
 	progressRate  float64
 	size          int64
 	pausedChan    *chan int
-	isPaused      bool
 }
 
 func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
@@ -138,7 +137,6 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 func (d *defaultDownloader) Pause() error {
 	if d.state == StateInProgress {
 		close(*d.pausedChan)
-		d.isPaused = true
 		d.state = StatePaused
 	}
 	return nil

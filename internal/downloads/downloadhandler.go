@@ -20,7 +20,6 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		progressRate:  0,
 		size:          0,
 		pausedChan:    nil,
-		isPaused:      false,
 	}
 
 	defDow.pausedChan = &pausedChan

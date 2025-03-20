@@ -11,15 +11,6 @@ const (
 	StateFailed     DownloadState = "FAILED"
 )
 
-type DownloadState string
-
-const (
-	StateInProgress DownloadState = "IN_PROGRESS"
-	StatePaused     DownloadState = "PAUSED"
-	StateCompleted  DownloadState = "COMPLETED"
-	StateFailed     DownloadState = "FAILED"
-)
-
 type DownloadHandler interface {
 	Start(ctx context.Context) error
 	Pause() error
@@ -29,6 +20,6 @@ type DownloadHandler interface {
 type DownloadStatus struct {
 	ID                 int64
 	ProgressPercentage float32
-	Speed              float32 // bytes per second
+	Speed              float32
 	State              DownloadState
 }
