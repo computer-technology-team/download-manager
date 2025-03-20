@@ -35,7 +35,6 @@ type keymap struct {
 	quit       key.Binding
 	nextTab    key.Binding
 	prevTab    key.Binding
-	tabManager TabManager
 }
 
 type model struct {
@@ -54,13 +53,13 @@ func (m model) Init() tea.Cmd {
 	})...)
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m model) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.help.Width = msg.Width
 
-		newMsg := tea.WindowSizeMsg{Width: msg.Width - 2, Height: msg.Height - 10}
+		newMsg := tea.WindowSizeMsg{Width: msg.Width - 2, Height: msg.Height - 4}
 
 		cmds := make([]tea.Cmd, len(m.tabs))
 		for i, t := range m.tabs {
@@ -96,12 +95,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		var childCmd tea.Cmd
+		m.tabs[m.activeTab].View, childCmd = m.GetActiveTab().View.Update(msg)
+
+		return m, childCmd
+	default:
+		cmds := make([]tea.Cmd, len(m.tabs))
+		for i, t := range m.tabs {
+			m.tabs[i].View, cmds[i] = t.View.Update(msg)
+		}
+
+		return m, tea.Batch(cmds...)
 	}
 
-	var childCmd tea.Cmd
-	m.tabs[m.activeTab].View, childCmd = m.GetActiveTab().View.Update(msg)
-
-	return m, childCmd
 }
 
 func (m model) View() string {
@@ -155,9 +161,6 @@ func (m model) View() string {
 	doc.WriteString(windowContent)
 	doc.WriteString("\n")
 
-	m.keymap.tabManager = m
-	doc.WriteString(m.help.View(m.keymap))
-
 	return doc.String()
 }
 
@@ -165,22 +168,22 @@ func (m model) GetActiveTab() Tab {
 	return m.tabs[m.activeTab]
 }
 
-func (k keymap) ShortHelp() []key.Binding {
-	return slices.Concat([]key.Binding{k.helpToggle}, k.fkeys, k.getActiveTabShortHelp())
+func (m model) ShortHelp() []key.Binding {
+	return slices.Concat(m.keymap.fkeys, m.getActiveTabShortHelp())
 }
 
-func (k keymap) FullHelp() [][]key.Binding {
-	res := [][]key.Binding{k.fkeys, {k.helpToggle, k.quit, k.prevTab, k.nextTab}}
-	res = append(res, k.getActiveTabFullHelp()...)
+func (m model) FullHelp() [][]key.Binding {
+	res := [][]key.Binding{m.keymap.fkeys, {m.keymap.prevTab, m.keymap.nextTab}}
+	res = append(res, m.getActiveTabFullHelp()...)
 	return res
 }
 
-func (k keymap) getActiveTabShortHelp() []key.Binding {
-	return k.tabManager.GetActiveTab().View.ShortHelp()
+func (m model) getActiveTabShortHelp() []key.Binding {
+	return m.GetActiveTab().View.ShortHelp()
 }
 
-func (k keymap) getActiveTabFullHelp() [][]key.Binding {
-	return k.tabManager.GetActiveTab().View.FullHelp()
+func (m model) getActiveTabFullHelp() [][]key.Binding {
+	return m.GetActiveTab().View.FullHelp()
 }
 
 func initKeymap(tabs []Tab) keymap {
@@ -191,14 +194,6 @@ func initKeymap(tabs []Tab) keymap {
 				key.WithHelp(fmt.Sprintf("F%d", i+1), t.Name),
 			)
 		}),
-		helpToggle: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "toggles full help"),
-		),
-		quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q/ctrl+c", "quit"),
-		),
 		nextTab: key.NewBinding(
 			key.WithKeys("right", "tab"),
 			key.WithHelp("→/tab", "next tab"),
@@ -210,14 +205,11 @@ func initKeymap(tabs []Tab) keymap {
 	}
 }
 
-func New(defaultActive int, tabs ...Tab) tea.Model {
-	helpModel := help.New()
-	helpModel.ShowAll = true
+func New(defaultActive int, tabs ...Tab) types.View {
 
 	return model{
 		tabs:      tabs,
 		activeTab: min(len(tabs)-1, defaultActive),
 		keymap:    initKeymap(tabs),
-		help:      helpModel,
 	}
 }

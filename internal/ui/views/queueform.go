@@ -1,9 +1,11 @@
 package views
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"slices"
 	"strings"
 
@@ -19,22 +21,28 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/counterinput"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/directorypicker"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/optionalinput"
+	"github.com/computer-technology-team/download-manager.git/internal/ui/components/startendtimeinput"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/textinput"
-	"github.com/computer-technology-team/download-manager.git/internal/ui/components/timeinput"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
+
+var ErrEmptyQueueFormName = errors.New("queue name can not be empty")
 
 type queueFormInputIndex int
 
 type buttonType string
+
+type queueFormError struct {
+	error
+}
 
 const (
 	name queueFormInputIndex = iota
 	bandwidthLimitBPS
 	directoryPicker
 	maxConcurrentDownload
-	startTime
-	endTime
+	retryLimit
+	startEndTime
 	submit
 
 	totalInputs
@@ -43,6 +51,9 @@ const (
 	cancelButton buttonType = "cancel"
 
 	inputLocationGuide = " ↓"
+
+	defaultRetryLimit = 3
+	maxRetryLimit     = 10
 )
 
 type queueForm struct {
@@ -52,8 +63,8 @@ type queueForm struct {
 	bandwidthLimitBPS     types.Input[*int64]
 	directoryPicker       types.Input[string]
 	maxConcurrentDownload types.Input[int64]
-	startTime             types.Input[types.TimeValue]
-	endTime               types.Input[types.TimeValue]
+	retryLimit            types.Input[int64]
+	startEndTime          types.Input[*startendtimeinput.StartEndTime]
 
 	submit *buttonrow.Model
 
@@ -61,6 +72,7 @@ type queueForm struct {
 	err   error
 
 	queueManager queues.QueueManager
+	onClose      tea.Cmd
 }
 
 type button struct {
@@ -110,21 +122,33 @@ func (v *queueForm) updateFocus() {
 
 func (v queueForm) focusables() []types.Focusable {
 	return []types.Focusable{
-		v.name, v.bandwidthLimitBPS, v.directoryPicker, v.maxConcurrentDownload, v.startTime, v.endTime, v.submit,
+		v.name, v.bandwidthLimitBPS, v.directoryPicker, v.maxConcurrentDownload, v.retryLimit, v.startEndTime, v.submit,
 	}
 }
 
 func (v queueForm) keyMappers() []help.KeyMap {
 	return []help.KeyMap{
-		v.name, v.bandwidthLimitBPS, v.directoryPicker, v.maxConcurrentDownload, v.startTime, v.endTime, v.submit,
+		v.name, v.bandwidthLimitBPS, v.directoryPicker, v.maxConcurrentDownload, v.retryLimit, v.startEndTime, v.submit,
 	}
 }
 
 func (v queueForm) initCmds() []tea.Cmd {
 	return []tea.Cmd{
 		v.name.Init(), v.bandwidthLimitBPS.Init(), v.directoryPicker.Init(),
-		v.maxConcurrentDownload.Init(), v.startTime.Init(), v.endTime.Init(),
+		v.maxConcurrentDownload.Init(), v.retryLimit.Init(), v.startEndTime.Init(),
 	}
+}
+
+// inputsError returns a joined error of all input validation errors
+func (v queueForm) inputsError() error {
+	return errors.Join(
+		v.name.Error(),
+		v.bandwidthLimitBPS.Error(),
+		v.directoryPicker.Error(),
+		v.maxConcurrentDownload.Error(),
+		v.retryLimit.Error(),
+		v.startEndTime.Error(),
+	)
 }
 
 func (v *queueForm) nextInput() {
@@ -195,27 +219,27 @@ func (v queueForm) View() string {
 		sb.WriteString(" ⚠️ " + err.Error())
 	}
 	sb.WriteString("\n")
-	// Start time
-	sb.WriteString("Start Time: ")
-	if v.focus == startTime {
+
+	// Retry limit
+	sb.WriteString("Retry Limit: ")
+	if v.focus == retryLimit {
 		sb.WriteString(inputLocationGuide)
 	}
 	sb.WriteString("\n")
-	sb.WriteString(v.startTime.View())
-	if err := v.startTime.Error(); err != nil {
+	sb.WriteString(v.retryLimit.View())
+	if err := v.retryLimit.Error(); err != nil {
 		sb.WriteString(" ⚠️ " + err.Error())
 	}
-
 	sb.WriteString("\n")
 
-	// End time
-	sb.WriteString("End Time:\n")
-	if v.focus == endTime {
+	// Start time
+	sb.WriteString("Schedule: ")
+	if v.focus == startEndTime {
 		sb.WriteString(inputLocationGuide)
 	}
 	sb.WriteString("\n")
-	sb.WriteString(v.endTime.View())
-	if err := v.endTime.Error(); err != nil {
+	sb.WriteString(v.startEndTime.View())
+	if err := v.startEndTime.Error(); err != nil {
 		sb.WriteString(" ⚠️ " + err.Error())
 	}
 
@@ -225,22 +249,46 @@ func (v queueForm) View() string {
 
 	// Form-level error message if any
 	if v.err != nil {
-		sb.WriteString("Error: " + v.err.Error() + "\n\n")
+		sb.WriteString("\nError: " + v.err.Error() + "\n\n")
 	}
 
 	return sb.String()
 }
 
-func createQueueCmd(name string, bandwidthLimit *int64, directory string, maxConcurrent int64, startTime, endTime types.TimeValue) tea.Cmd {
+func (v queueForm) createQueueCmd(name string, bandwidthLimit *int64, directory string, maxConcurrent int64, retryLimit int64, startEndTime *startendtimeinput.StartEndTime) tea.Cmd {
+	inputErrs := v.inputsError()
 	return func() tea.Msg {
-		slog.Info("create queue",
-			"name", name,
-			"bandwidthLimit", bandwidthLimit,
-			"directory", directory,
-			"maxConcurrent", maxConcurrent,
-			"startTime", startTime,
-			"endTime", endTime)
-		return nil
+		if inputErrs != nil {
+			return queueFormError{
+				error: fmt.Errorf("some input validation have failed: %w", inputErrs),
+			}
+		}
+
+		queueParam := state.CreateQueueParams{
+			Name:      name,
+			Directory: directory,
+			MaxBandwidth: sql.NullInt64{
+				Valid: bandwidthLimit != nil,
+				Int64: lo.FromPtr(bandwidthLimit),
+			},
+			RetryLimit:    retryLimit,
+			MaxConcurrent: maxConcurrent,
+		}
+		if startEndTime != nil {
+			queueParam.StartDownload, queueParam.EndDownload = startEndTime.A, startEndTime.B
+			queueParam.ScheduleMode = true
+		} else {
+			queueParam.ScheduleMode = false
+		}
+
+		err := v.queueManager.CreateQueue(context.Background(), queueParam)
+		if err != nil {
+			return queueFormError{
+				error: err,
+			}
+		}
+
+		return v.onClose()
 	}
 }
 
@@ -249,6 +297,8 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case queueFormError:
+		v.err = msg.error
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
@@ -256,24 +306,18 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 				// Check which button is selected
 				selectedButton := v.submit.SelectedButton().(button)
 				if selectedButton.slug == string(submitButton) {
-					// Validate form before submission
-					if v.name.Value() == "" {
-						v.err = nil
-						return v, nil
-					}
 
 					// Create the queue
-					return v, createQueueCmd(
+					return v, v.createQueueCmd(
 						v.name.Value(),
 						v.bandwidthLimitBPS.Value(),
 						v.directoryPicker.Value(),
 						v.maxConcurrentDownload.Value(),
-						v.startTime.Value(),
-						v.endTime.Value(),
+						v.retryLimit.Value(),
+						v.startEndTime.Value(),
 					)
 				} else if selectedButton.slug == string(cancelButton) {
-					// Cancel form - return to list view
-					return v, tea.Quit
+					return v, v.onClose
 				}
 			} else {
 				v.nextInput()
@@ -282,6 +326,8 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 			v.prevInput()
 		case tea.KeyDown:
 			v.nextInput()
+		case tea.KeyEsc:
+			return v, v.onClose
 		default:
 			var cmd tea.Cmd
 			switch v.focus {
@@ -297,11 +343,11 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 			case maxConcurrentDownload:
 				v.maxConcurrentDownload, cmd = v.maxConcurrentDownload.Update(msg)
 				cmds = append(cmds, cmd)
-			case startTime:
-				v.startTime, cmd = v.startTime.Update(msg)
+			case retryLimit:
+				v.retryLimit, cmd = v.retryLimit.Update(msg)
 				cmds = append(cmds, cmd)
-			case endTime:
-				v.endTime, cmd = v.endTime.Update(msg)
+			case startEndTime:
+				v.startEndTime, cmd = v.startEndTime.Update(msg)
 				cmds = append(cmds, cmd)
 			case submit:
 				var buttonModel buttonrow.Model
@@ -333,14 +379,14 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 		v.maxConcurrentDownload = maxConcInput
 		cmds = append(cmds, cmd)
 
-		var startTimeInput types.Input[types.TimeValue]
-		startTimeInput, cmd = v.startTime.Update(msg)
-		v.startTime = startTimeInput
+		var retryLimitInput types.Input[int64]
+		retryLimitInput, cmd = v.retryLimit.Update(msg)
+		v.retryLimit = retryLimitInput
 		cmds = append(cmds, cmd)
 
-		var endTimeInput types.Input[types.TimeValue]
-		endTimeInput, cmd = v.endTime.Update(msg)
-		v.endTime = endTimeInput
+		var startTimeInput types.Input[*startendtimeinput.StartEndTime]
+		startTimeInput, cmd = v.startEndTime.Update(msg)
+		v.startEndTime = startTimeInput
 		cmds = append(cmds, cmd)
 
 		var buttonModel buttonrow.Model
@@ -352,23 +398,19 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 	return v, tea.Batch(cmds...)
 }
 
-func NewQueueCreateForm(queueManager queues.QueueManager) *queueForm {
-	nameInput := textinput.New()
-	nameInput.Placeholder = "Enter queue name"
-	nameInput.Focus()
-	nameInput.Width = 40
+func NewQueueCreateForm(queueManager queues.QueueManager, onClose tea.Cmd) *queueForm {
+	nameInput := queueFormNameInput()
 
-	bandwidthLimitInput := optionalinput.New(
-		counterinput.New(
-			counterinput.WithStep(100),
-			counterinput.WithMax(1<<63-1),
-			counterinput.WithStepHandler(BPSStepHandler)))
+	bandwidthLimitInput := newQueueFormBandwidthLimitInput()
+
 	directoryInput := directorypicker.New()
 
 	maxConcurrentInput := counterinput.New()
 
-	startTimeInput := timeinput.New()
-	endTimeInput := timeinput.New()
+	retryLimitInput := counterinput.New(
+		counterinput.WithMax(maxRetryLimit))
+
+	startEndTimeInput := optionalinput.New(startendtimeinput.New())
 
 	buttonRow, err := buttonrow.New([]buttonrow.Button{
 		button{label: "Submit", slug: string(submitButton), color: lipgloss.Color("#00FF00")},
@@ -384,12 +426,13 @@ func NewQueueCreateForm(queueManager queues.QueueManager) *queueForm {
 		bandwidthLimitBPS:     bandwidthLimitInput,
 		directoryPicker:       directoryInput,
 		maxConcurrentDownload: maxConcurrentInput,
-		startTime:             startTimeInput,
-		endTime:               endTimeInput,
+		retryLimit:            retryLimitInput,
+		startEndTime:          startEndTimeInput,
 		submit:                buttonRow,
 		focus:                 name,
 
 		queueManager: queueManager,
+		onClose:      onClose,
 	}
 
 	qfv.updateFocus()
@@ -397,23 +440,13 @@ func NewQueueCreateForm(queueManager queues.QueueManager) *queueForm {
 	return qfv
 }
 
-func NewQueueEditForm(queue state.Queue, queueManager queues.QueueManager) (*queueForm, error) {
+func NewQueueEditForm(queue state.Queue,
+	queueManager queues.QueueManager, onClose tea.Cmd) (*queueForm, error) {
 	var err error
 
-	nameInput := textinput.New()
-	nameInput.Placeholder = "Enter queue name"
-	nameInput.Width = 40
-	err = nameInput.SetValue(queue.Name)
-	if err != nil {
-		return nil, err
-	}
+	nameInput := queueFormNameInput()
 
-	bandwidthLimitInput := optionalinput.New(
-		counterinput.New(
-			counterinput.WithStep(100),
-			counterinput.WithMax(1<<63-1),
-			counterinput.WithStepHandler(BPSStepHandler),
-		))
+	bandwidthLimitInput := newQueueFormBandwidthLimitInput()
 	err = bandwidthLimitInput.SetValue(
 		lo.Ternary(queue.MaxBandwidth.Valid, &queue.MaxBandwidth.Int64, nil),
 	)
@@ -428,12 +461,19 @@ func NewQueueEditForm(queue state.Queue, queueManager queues.QueueManager) (*que
 	}
 
 	maxConcurrentInput := counterinput.New()
-	//do this
+	err = maxConcurrentInput.SetValue(queue.MaxConcurrent)
+	if err != nil {
+		return nil, err
+	}
 
-	startTimeInput := timeinput.New()
-	//do this
+	retryLimitInput := counterinput.New(
+		counterinput.WithMax(maxRetryLimit))
+	err = retryLimitInput.SetValue(queue.RetryLimit)
+	if err != nil {
+		return nil, err
+	}
 
-	endTimeInput := timeinput.New()
+	startTimeInput := optionalinput.New(startendtimeinput.New())
 	//do this
 
 	buttonRow, err := buttonrow.New([]buttonrow.Button{
@@ -450,13 +490,14 @@ func NewQueueEditForm(queue state.Queue, queueManager queues.QueueManager) (*que
 		bandwidthLimitBPS:     bandwidthLimitInput,
 		directoryPicker:       directoryInput,
 		maxConcurrentDownload: maxConcurrentInput,
-		startTime:             startTimeInput,
-		endTime:               endTimeInput,
+		retryLimit:            retryLimitInput,
+		startEndTime:          startTimeInput,
 		submit:                buttonRow,
 		focus:                 name,
 		queueID:               &queue.ID,
 
 		queueManager: queueManager,
+		onClose:      onClose,
 	}
 
 	qfv.updateFocus()
@@ -464,38 +505,27 @@ func NewQueueEditForm(queue state.Queue, queueManager queues.QueueManager) (*que
 	return qfv, nil
 }
 
-func BPSStepHandler(_, value int64) int64 {
-	switch {
-	case value <= 200:
-		return 100
-	case value < 100000:
-		return int64(math.Pow10(int(math.Log10(float64(value))+1))) / 2
-	case value < 500000:
-		return 100000
-	case value < 8000000:
-		return 500000
-	default:
-		return 1000000
-	}
+func newQueueFormBandwidthLimitInput() *optionalinput.OptionalInput[int64] {
+	bandwidthLimitInput := optionalinput.New(
+		counterinput.New(
+			counterinput.WithStep(100),
+			counterinput.WithMax(1<<63-1),
+			counterinput.WithStepHandler(BPSStepHandler),
+		))
+	return bandwidthLimitInput
 }
 
-func FormatBytesPerSecond(bps int64) string {
-	const (
-		KB float64 = 1024
-		MB float64 = KB * 1024
-		GB float64 = MB * 1024
-	)
-
-	bytesPerSec := float64(bps)
-
-	switch {
-	case bytesPerSec >= GB:
-		return fmt.Sprintf("%.2f GB/s", bytesPerSec/GB)
-	case bytesPerSec >= MB:
-		return fmt.Sprintf("%.2f MB/s", bytesPerSec/MB)
-	case bytesPerSec >= KB:
-		return fmt.Sprintf("%.2f KB/s", bytesPerSec/KB)
-	default:
-		return fmt.Sprintf("%d B/s", bps)
+func queueFormNameInput() textinput.Model {
+	nameInput := textinput.New()
+	nameInput.Err = ErrEmptyQueueFormName
+	nameInput.Placeholder = "Enter queue name"
+	nameInput.Focus()
+	nameInput.Validate = func(s string) error {
+		if s == "" {
+			return ErrEmptyQueueFormName
+		}
+		return nil
 	}
+	nameInput.Width = 40
+	return nameInput
 }

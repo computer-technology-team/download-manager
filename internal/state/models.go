@@ -6,7 +6,6 @@ package state
 
 import (
 	"database/sql"
-	"time"
 )
 
 type Download struct {
@@ -31,8 +30,9 @@ type Queue struct {
 	Name          string
 	Directory     string
 	MaxBandwidth  sql.NullInt64
-	StartDownload time.Time
-	EndDownload   time.Time
+	StartDownload TimeValue
+	EndDownload   TimeValue
 	RetryLimit    int64
 	ScheduleMode  bool
+	MaxConcurrent int64
 }

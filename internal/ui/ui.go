@@ -33,5 +33,7 @@ func NewDownloadManagerProgram(ctx context.Context, queueManager queues.QueueMan
 		tabs.Tab{Name: "Queues List", View: queueList},
 	)
 
-	return tea.NewProgram(tabsModel), nil
+	downloadManagerM := newDownloadManagerViewModel(tabsModel)
+
+	return tea.NewProgram(downloadManagerM), nil
 }

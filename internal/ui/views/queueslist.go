@@ -2,18 +2,24 @@ package views
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
 type queueListViewMode string
+
+type backToTable struct{}
 
 const (
 	tableMode      queueListViewMode = "table"
@@ -39,9 +45,9 @@ var queuesColumns = []table.Column{
 
 // KeyMap defines the keybindings for the queues list view
 type queueListKeyMap struct {
-	EditQueue key.Binding
-	NewQueue  key.Binding
-	Back      key.Binding
+	EditQueue   key.Binding
+	NewQueue    key.Binding
+	DeleteQueue key.Binding
 }
 
 // DefaultKeyMap returns the default keybindings
@@ -51,11 +57,17 @@ func DefaultQueueListKeyMap() queueListKeyMap {
 			key.WithKeys("n", "+"),
 			key.WithHelp("n/+", "new queue"),
 		),
-		Back: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "back to list"),
+		DeleteQueue: key.NewBinding(
+			key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete queue"),
+		),
+		EditQueue: key.NewBinding(
+			key.WithKeys("e"), key.WithHelp("e", "edit queue"),
 		),
 	}
+}
+
+func backToTableCmd() tea.Msg {
+	return backToTable{}
 }
 
 type queuesListView struct {
@@ -126,7 +138,7 @@ func (m queuesListView) Init() tea.Cmd { return nil }
 func (m *queuesListView) switchToCreateFormMode() tea.Cmd {
 	m.mode = createFormMode
 	if m.queueCreateForm == nil {
-		m.queueCreateForm = NewQueueCreateForm(m.queueManager)
+		m.queueCreateForm = NewQueueCreateForm(m.queueManager, backToTableCmd)
 		return m.queueCreateForm.Init()
 	}
 
@@ -134,10 +146,17 @@ func (m *queuesListView) switchToCreateFormMode() tea.Cmd {
 }
 
 func (m *queuesListView) switchToEditFormMode() tea.Cmd {
+	if len(m.queues) == 0 {
+		return func() tea.Msg {
+			return types.ErrorMsg{
+				Err: errors.New("no queue to edit"),
+			}
+		}
+	}
 	m.mode = editFormMode
 	if m.queueEditForm == nil {
 		var err error
-		m.queueEditForm, err = NewQueueEditForm(state.Queue{}, m.queueManager)
+		m.queueEditForm, err = NewQueueEditForm(m.queues[m.tableModel.Cursor()], m.queueManager, backToTableCmd)
 		if err != nil {
 			slog.Error("could not render edit form", "error", err)
 			m.mode = tableMode
@@ -153,10 +172,44 @@ func (m *queuesListView) switchToTableMode() {
 	m.mode = tableMode
 }
 
+func (m *queuesListView) handleEvent(msg events.Event) {
+	switch msg.EventType {
+	case events.QueueCreated:
+		m.queues = append(m.queues, msg.Payload.(state.Queue))
+	case events.QueueDeleted:
+		deletedQueueID := msg.Payload.(int64)
+		m.queues = lo.Filter(m.queues, func(queue state.Queue, _ int) bool {
+			return deletedQueueID != queue.ID
+		})
+
+	case events.QueueEdited:
+		queue := msg.Payload.(state.Queue)
+		_, queueIdx, found := lo.FindIndexOf(m.queues, func(queueI state.Queue) bool {
+			return queueI.ID == queue.ID
+		})
+		if !found {
+			slog.Warn("queue was not found but update requested", "queue_id", queue.ID)
+		}
+
+		m.queues[queueIdx] = queue
+	default:
+		return
+	}
+
+	m.tableModel.SetRows(lo.Map(m.queues, func(queue state.Queue, _ int) table.Row {
+		return queueToQueueTableRow(queue)
+	}))
+}
+
 func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case events.Event:
+		m.handleEvent(msg)
+	case backToTable:
+		m.switchToTableMode()
+		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
 		case tableMode:
@@ -166,22 +219,16 @@ func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 				return m, m.switchToCreateFormMode()
 			case key.Matches(msg, m.keyMap.EditQueue):
 				return m, m.switchToEditFormMode()
+			case key.Matches(msg, m.keyMap.DeleteQueue):
+				return m, m.deleteQueue()
 			}
 		case createFormMode:
-			if key.Matches(msg, m.keyMap.Back) {
-				m.switchToTableMode()
-				return m, nil
-			}
 
 			formView, cmd := m.queueCreateForm.Update(msg)
 			m.queueCreateForm = &formView
 
 			return m, cmd
 		case editFormMode:
-			if key.Matches(msg, m.keyMap.Back) {
-				m.switchToTableMode()
-				return m, nil
-			}
 
 			formView, cmd := m.queueEditForm.Update(msg)
 			m.queueCreateForm = &formView
@@ -196,15 +243,48 @@ func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 		m.updateColumnWidths()
 	}
 
-	if m.mode == tableMode {
-		m.tableModel, cmd = m.tableModel.Update(msg)
-	} else {
+	var cmds []tea.Cmd
+
+	m.tableModel, cmd = m.tableModel.Update(msg)
+	cmds = append(cmds, cmd)
+
+	if m.queueCreateForm != nil {
 		var formView queueForm
 		formView, cmd = m.queueCreateForm.Update(msg)
+		cmds = append(cmds, cmd)
 		m.queueCreateForm = &formView
 	}
 
-	return m, cmd
+	if m.queueEditForm != nil {
+		var formView queueForm
+		formView, cmd = m.queueEditForm.Update(msg)
+		cmds = append(cmds, cmd)
+		m.queueEditForm = &formView
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *queuesListView) deleteQueue() tea.Cmd {
+	if len(m.queues) == 0 {
+		return func() tea.Msg {
+			return types.ErrorMsg{
+				Err: errors.New("no queue to delete"),
+			}
+		}
+	}
+
+	return func() tea.Msg {
+		currQueue := m.queues[m.tableModel.Cursor()]
+		err := m.queueManager.DeleteQueue(context.Background(), currQueue.ID)
+		if err != nil {
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not delete queue %s: %w", currQueue.Name, err),
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m queuesListView) View() string {
@@ -221,7 +301,12 @@ func NewQueuesList(ctx context.Context, queueManager queues.QueueManager) (types
 		return nil, err
 	}
 
+	rows := lo.Map(queues, func(queue state.Queue, _ int) table.Row {
+		return queueToQueueTableRow(queue)
+	})
+
 	t := table.New(
+		table.WithRows(rows),
 		table.WithColumns(queuesColumns),
 		table.WithFocused(true),
 		table.WithStyles(tableStyles),
@@ -236,4 +321,22 @@ func NewQueuesList(ctx context.Context, queueManager queues.QueueManager) (types
 
 		queueManager: queueManager,
 	}, nil
+}
+
+func queueToQueueTableRow(queue state.Queue) table.Row {
+	var bandwidthLimit, startEndTime string
+
+	if queue.MaxBandwidth.Valid {
+		bandwidthLimit = FormatBytesPerSecond(queue.MaxBandwidth.Int64)
+	} else {
+		bandwidthLimit = "No Limit"
+	}
+
+	if queue.ScheduleMode {
+		startEndTime = fmt.Sprintf("%s - %s", queue.StartDownload, queue.EndDownload)
+	} else {
+		startEndTime = "No Schedule"
+	}
+
+	return table.Row{queue.Name, bandwidthLimit, queue.Directory, "", startEndTime}
 }

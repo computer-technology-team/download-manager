@@ -2,7 +2,6 @@ package listinput
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -21,60 +20,69 @@ var (
 				Foreground(lipgloss.Color("#CDD6F4"))
 )
 
-type item struct {
-	id          int
-	title, desc string
+type Item struct {
+	id    string
+	title string
+	desc  string
 }
 
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.desc }
-func (i item) FilterValue() string { return i.title }
+func NewItem(id, title, desc string) Item {
+	return Item{
+		id:    id,
+		title: title,
+		desc:  desc,
+	}
+}
 
-type model struct {
-	list  list.Model
+func (i Item) Title() string       { return i.title }
+func (i Item) Description() string { return i.desc }
+func (i Item) FilterValue() string { return i.title }
+
+type Model struct {
+	list.Model
 	focus bool
 }
 
 // GetSelected returns the currently selected item
-func (m *model) GetSelected() (list.Item, bool) {
-	if m.list.SelectedItem() == nil {
+func (m *Model) GetSelected() (list.Item, bool) {
+	if m.Model.SelectedItem() == nil {
 		return nil, false
 	}
-	return m.list.SelectedItem(), true
+	return m.Model.SelectedItem(), true
 }
 
 // GetSelectedTitle returns the title of the currently selected item
-func (m *model) GetSelectedTitle() string {
+func (m *Model) GetSelectedTitle() string {
 	if selected, ok := m.GetSelected(); ok {
-		return selected.(item).Title()
+		return selected.(Item).Title()
 	}
 	return "None selected"
 }
 
 // Blur implements types.Input.
-func (m *model) Blur() {
+func (m *Model) Blur() {
 	m.focus = false
 }
 
 // Focus implements types.Input.
-func (m *model) Focus() tea.Cmd {
+func (m *Model) Focus() tea.Cmd {
 	m.focus = true
 	return nil
 }
 
-func (m model) Error() error {
+func (m Model) Error() error {
 	return nil
 }
 
-func (m model) Value() string {
-	return m.list.SelectedItem().(item).title
+func (m Model) Value() string {
+	return m.Model.SelectedItem().(Item).id
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (types.Input[string], tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (types.Input[string], tea.Cmd) {
 	// Only process key events when focused
 	if !m.focus {
 		return &m, nil
@@ -83,16 +91,16 @@ func (m model) Update(msg tea.Msg) (types.Input[string], tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Handle window size changes
-		m.list.SetWidth(msg.Width - 4)
-		m.list.SetHeight(10)
+		m.Model.SetWidth(msg.Width - 4)
+		m.Model.SetHeight(10)
 	}
 
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	m.Model, cmd = m.Model.Update(msg)
 	return &m, cmd
 }
 
-func (m model) View() string {
+func (m Model) View() string {
 	if !m.focus {
 		// When not focused, just show the selected item
 		selected := m.GetSelectedTitle()
@@ -101,34 +109,34 @@ func (m model) View() string {
 
 	// When focused, show the list with a reasonable height
 	// Setting to 10 to ensure items are visible (3 is too small)
-	m.list.SetHeight(10)
+	m.Model.SetHeight(10)
 
 	// Make sure the list is visible by setting appropriate styles
-	m.list.Styles.Title = lipgloss.NewStyle().
+	m.Model.Styles.Title = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#89B4FA")).
 		MarginLeft(2)
 
 	// Ensure the selected item is visible
-	if m.list.Index() < 0 && len(m.list.Items()) > 0 {
-		m.list.Select(0)
+	if m.Model.Index() < 0 && len(m.Model.Items()) > 0 {
+		m.Model.Select(0)
 	}
 
-	return docStyle.Render(m.list.View())
+	return docStyle.Render(m.Model.View())
 }
 
-func (m model) ShortHelp() []key.Binding {
-	return m.list.ShortHelp()
+func (m Model) ShortHelp() []key.Binding {
+	return m.Model.ShortHelp()
 }
 
-func (m model) FullHelp() [][]key.Binding {
-	return m.list.FullHelp()
+func (m Model) FullHelp() [][]key.Binding {
+	return m.Model.FullHelp()
 }
 
-func (m *model) SetValue(id string) error {
-	for i, itemI := range m.list.Items() {
-		if strconv.Itoa(itemI.(item).id) == id {
-			m.list.Select(i)
+func (m *Model) SetValue(id string) error {
+	for i, itemI := range m.Model.Items() {
+		if itemI.(Item).id == id {
+			m.Model.Select(i)
 			return nil
 		}
 	}
@@ -136,7 +144,19 @@ func (m *model) SetValue(id string) error {
 	return ErrItemNotFound
 }
 
-func New(title string, barItemNameSingular, barItemNamePlural string) *model {
+func (m *Model) FindItemIdx(id string) (idx int, found bool) {
+	for i, item := range m.Items() {
+		if item.(Item).id == id {
+			idx = i
+			found = true
+			return
+		}
+	}
+
+	return
+}
+
+func New(title string, barItemNameSingular, barItemNamePlural string, items []list.Item) *Model {
 	// Create a delegate with custom styles
 	delegate := list.NewDefaultDelegate()
 
@@ -146,14 +166,6 @@ func New(title string, barItemNameSingular, barItemNamePlural string) *model {
 		Bold(true)
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
 		Foreground(lipgloss.Color("#CBA6F7"))
-
-	items := []list.Item{
-		item{id: 1, title: "Default", desc: "Default download queue"},
-		item{id: 2, title: "High Priority", desc: "For urgent downloads"},
-		item{id: 3, title: "Low Priority", desc: "For background downloads"},
-		item{id: 4, title: "Media", desc: "For videos and music"},
-		item{id: 5, title: "Documents", desc: "For PDFs and other documents"},
-	}
 
 	// Create the list with initial dimensions
 	listModel := list.New(items, delegate, 30, 10)
@@ -174,8 +186,8 @@ func New(title string, barItemNameSingular, barItemNamePlural string) *model {
 	listModel.SetShowTitle(true)
 	listModel.SetShowHelp(false)
 
-	return &model{
-		list:  listModel,
+	return &Model{
+		Model: listModel,
 		focus: false,
 	}
 }

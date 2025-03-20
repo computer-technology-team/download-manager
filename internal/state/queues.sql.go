@@ -8,22 +8,23 @@ package state
 import (
 	"context"
 	"database/sql"
-	"time"
 )
 
 const createQueue = `-- name: CreateQueue :one
-INSERT INTO queues (name, directory, max_bandwidth, start_download, end_download, retry_limit)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode
+INSERT INTO queues (name, directory, max_bandwidth, start_download, end_download, retry_limit, max_concurrent, schedule_mode)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode, max_concurrent
 `
 
 type CreateQueueParams struct {
 	Name          string
 	Directory     string
 	MaxBandwidth  sql.NullInt64
-	StartDownload time.Time
-	EndDownload   time.Time
+	StartDownload TimeValue
+	EndDownload   TimeValue
 	RetryLimit    int64
+	MaxConcurrent int64
+	ScheduleMode  bool
 }
 
 func (q *Queries) CreateQueue(ctx context.Context, arg CreateQueueParams) (Queue, error) {
@@ -34,6 +35,8 @@ func (q *Queries) CreateQueue(ctx context.Context, arg CreateQueueParams) (Queue
 		arg.StartDownload,
 		arg.EndDownload,
 		arg.RetryLimit,
+		arg.MaxConcurrent,
+		arg.ScheduleMode,
 	)
 	var i Queue
 	err := row.Scan(
@@ -45,6 +48,7 @@ func (q *Queries) CreateQueue(ctx context.Context, arg CreateQueueParams) (Queue
 		&i.EndDownload,
 		&i.RetryLimit,
 		&i.ScheduleMode,
+		&i.MaxConcurrent,
 	)
 	return i, err
 }
@@ -60,7 +64,7 @@ func (q *Queries) DeleteQueue(ctx context.Context, id int64) error {
 }
 
 const getQueue = `-- name: GetQueue :one
-SELECT id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode FROM queues
+SELECT id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode, max_concurrent FROM queues
 WHERE id = ?
 `
 
@@ -76,12 +80,13 @@ func (q *Queries) GetQueue(ctx context.Context, id int64) (Queue, error) {
 		&i.EndDownload,
 		&i.RetryLimit,
 		&i.ScheduleMode,
+		&i.MaxConcurrent,
 	)
 	return i, err
 }
 
 const listQueues = `-- name: ListQueues :many
-SELECT id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode FROM queues
+SELECT id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode, max_concurrent FROM queues
 `
 
 func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
@@ -102,6 +107,7 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 			&i.EndDownload,
 			&i.RetryLimit,
 			&i.ScheduleMode,
+			&i.MaxConcurrent,
 		); err != nil {
 			return nil, err
 		}
@@ -118,17 +124,19 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 
 const updateQueue = `-- name: UpdateQueue :one
 UPDATE queues
-SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?
+SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?, max_concurrent = ?, schedule_mode = ?
 WHERE id = ?
-RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode
+RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode, max_concurrent
 `
 
 type UpdateQueueParams struct {
 	Name          string
 	MaxBandwidth  sql.NullInt64
-	StartDownload time.Time
-	EndDownload   time.Time
+	StartDownload TimeValue
+	EndDownload   TimeValue
 	RetryLimit    int64
+	MaxConcurrent int64
+	ScheduleMode  bool
 	ID            int64
 }
 
@@ -139,6 +147,8 @@ func (q *Queries) UpdateQueue(ctx context.Context, arg UpdateQueueParams) (Queue
 		arg.StartDownload,
 		arg.EndDownload,
 		arg.RetryLimit,
+		arg.MaxConcurrent,
+		arg.ScheduleMode,
 		arg.ID,
 	)
 	var i Queue
@@ -151,6 +161,7 @@ func (q *Queries) UpdateQueue(ctx context.Context, arg UpdateQueueParams) (Queue
 		&i.EndDownload,
 		&i.RetryLimit,
 		&i.ScheduleMode,
+		&i.MaxConcurrent,
 	)
 	return i, err
 }
