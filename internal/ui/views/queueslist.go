@@ -1,12 +1,14 @@
 package views
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
@@ -68,6 +70,8 @@ type queuesListView struct {
 
 	width  int
 	height int
+
+	queueManager queues.QueueManager
 }
 
 func (m *queuesListView) updateColumnWidths() {
@@ -122,7 +126,7 @@ func (m queuesListView) Init() tea.Cmd { return nil }
 func (m *queuesListView) switchToCreateFormMode() tea.Cmd {
 	m.mode = createFormMode
 	if m.queueCreateForm == nil {
-		m.queueCreateForm = NewQueueCreateForm()
+		m.queueCreateForm = NewQueueCreateForm(m.queueManager)
 		return m.queueCreateForm.Init()
 	}
 
@@ -133,7 +137,7 @@ func (m *queuesListView) switchToEditFormMode() tea.Cmd {
 	m.mode = editFormMode
 	if m.queueEditForm == nil {
 		var err error
-		m.queueEditForm, err = NewQueueEditForm(state.Queue{})
+		m.queueEditForm, err = NewQueueEditForm(state.Queue{}, m.queueManager)
 		if err != nil {
 			slog.Error("could not render edit form", "error", err)
 			m.mode = tableMode
@@ -211,16 +215,13 @@ func (m queuesListView) View() string {
 	return m.queueCreateForm.View()
 }
 
-func NewQueuesList() types.View {
-	rows := []table.Row{
-		{"name1", "limit1", "dir1", "conc1", "start-endtime1"},
-		{"name2", "limit2", "dir2", "conc2", "start-endtime2"},
-		{"name3", "limit3", "dir3", "conc3", "start-endtime3"},
-		{"name4", "limit4", "dir4", "conc4", "start-endtime4"},
+func NewQueuesList(ctx context.Context, queueManager queues.QueueManager) (types.View, error) {
+	queues, err := queueManager.ListQueue(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	t := table.New(
-		table.WithRows(rows),
 		table.WithColumns(queuesColumns),
 		table.WithFocused(true),
 		table.WithStyles(tableStyles),
@@ -230,5 +231,9 @@ func NewQueuesList() types.View {
 		tableModel: t,
 		mode:       tableMode,
 		keyMap:     DefaultQueueListKeyMap(),
-	}
+
+		queues: queues,
+
+		queueManager: queueManager,
+	}, nil
 }
