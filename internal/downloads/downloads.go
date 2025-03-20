@@ -150,7 +150,7 @@ func (d *defaultDownloader) Cancel() error {
 
 func (d *defaultDownloader) status() DownloadStatus {
 	return DownloadStatus{
-		ID: 				d.id,		
+		ID:                 d.id,
 		ProgressPercentage: float32(d.progress),
 		Speed:              float32(d.progressRate),
 		State:              d.state,
