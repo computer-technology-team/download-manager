@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
@@ -344,5 +345,6 @@ func queueToQueueTableRow(queue state.Queue) table.Row {
 		startEndTime = "No Schedule"
 	}
 
-	return table.Row{queue.Name, bandwidthLimit, queue.Directory, "", startEndTime}
+	return table.Row{queue.Name, bandwidthLimit, queue.Directory,
+		strconv.Itoa(int(queue.MaxConcurrent)), startEndTime}
 }
