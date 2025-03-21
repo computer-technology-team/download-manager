@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
