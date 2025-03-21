@@ -124,7 +124,7 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 
 const updateQueue = `-- name: UpdateQueue :one
 UPDATE queues
-SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?, max_concurrent = ?, schedule_mode = ?
+SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?, max_concurrent = ?, schedule_mode = ?, directory = ?
 WHERE id = ?
 RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode, max_concurrent
 `
@@ -137,6 +137,7 @@ type UpdateQueueParams struct {
 	RetryLimit    int64
 	MaxConcurrent int64
 	ScheduleMode  bool
+	Directory     string
 	ID            int64
 }
 
@@ -149,6 +150,7 @@ func (q *Queries) UpdateQueue(ctx context.Context, arg UpdateQueueParams) (Queue
 		arg.RetryLimit,
 		arg.MaxConcurrent,
 		arg.ScheduleMode,
+		arg.Directory,
 		arg.ID,
 	)
 	var i Queue

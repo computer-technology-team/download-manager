@@ -292,6 +292,43 @@ func (v queueForm) createQueueCmd(name string, bandwidthLimit *int64, directory 
 	}
 }
 
+func (v queueForm) updateQueueCmd(id int64, name string, bandwidthLimit *int64, directory string, maxConcurrent int64, retryLimit int64, startEndTime *startendtimeinput.StartEndTime) tea.Cmd {
+	inputErrs := v.inputsError()
+	return func() tea.Msg {
+		if inputErrs != nil {
+			return queueFormError{
+				error: fmt.Errorf("some input validation have failed: %w", inputErrs),
+			}
+		}
+
+		queueParam := state.UpdateQueueParams{
+			Name:      name,
+			Directory: directory,
+			MaxBandwidth: sql.NullInt64{
+				Valid: bandwidthLimit != nil,
+				Int64: lo.FromPtr(bandwidthLimit),
+			},
+			RetryLimit:    retryLimit,
+			MaxConcurrent: maxConcurrent,
+			ID:            id,
+		}
+		if startEndTime != nil {
+			queueParam.StartDownload, queueParam.EndDownload = startEndTime.A, startEndTime.B
+			queueParam.ScheduleMode = true
+		} else {
+			queueParam.ScheduleMode = false
+		}
+
+		err := v.queueManager.EditQueue(context.Background(), queueParam)
+		if err != nil {
+			return queueFormError{
+				error: err,
+			}
+		}
+
+		return v.onClose()
+	}
+}
 func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 
 	var cmds []tea.Cmd
@@ -307,15 +344,26 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 				selectedButton := v.submit.SelectedButton().(button)
 				if selectedButton.slug == string(submitButton) {
 
-					// Create the queue
-					return v, v.createQueueCmd(
-						v.name.Value(),
-						v.bandwidthLimitBPS.Value(),
-						v.directoryPicker.Value(),
-						v.maxConcurrentDownload.Value(),
-						v.retryLimit.Value(),
-						v.startEndTime.Value(),
-					)
+					if v.queueID == nil {
+						return v, v.createQueueCmd(
+							v.name.Value(),
+							v.bandwidthLimitBPS.Value(),
+							v.directoryPicker.Value(),
+							v.maxConcurrentDownload.Value(),
+							v.retryLimit.Value(),
+							v.startEndTime.Value(),
+						)
+					} else {
+						return v, v.updateQueueCmd(
+							*v.queueID,
+							v.name.Value(),
+							v.bandwidthLimitBPS.Value(),
+							v.directoryPicker.Value(),
+							v.maxConcurrentDownload.Value(),
+							v.retryLimit.Value(),
+							v.startEndTime.Value(),
+						)
+					}
 				} else if selectedButton.slug == string(cancelButton) {
 					return v, v.onClose
 				}
@@ -445,6 +493,10 @@ func NewQueueEditForm(queue state.Queue,
 	var err error
 
 	nameInput := queueFormNameInput()
+	err = nameInput.SetValue(queue.Name)
+	if err != nil {
+		return nil, err
+	}
 
 	bandwidthLimitInput := newQueueFormBandwidthLimitInput()
 	err = bandwidthLimitInput.SetValue(

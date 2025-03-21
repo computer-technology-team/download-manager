@@ -2,9 +2,7 @@ package views
 
 import (
 	"context"
-
 	"errors"
-
 	"fmt"
 	"log/slog"
 
@@ -159,12 +157,11 @@ func (m *queuesListView) switchToEditFormMode() tea.Cmd {
 	if m.queueEditForm == nil {
 		var err error
 		m.queueEditForm, err = NewQueueEditForm(m.queues[m.tableModel.Cursor()], m.queueManager, backToTableCmd)
-
 		if err != nil {
 			slog.Error("could not render edit form", "error", err)
 			m.mode = tableMode
 		} else {
-			return m.queueCreateForm.Init()
+			return m.queueEditForm.Init()
 		}
 	}
 
@@ -234,7 +231,7 @@ func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 		case editFormMode:
 
 			formView, cmd := m.queueEditForm.Update(msg)
-			m.queueCreateForm = &formView
+			m.queueEditForm = &formView
 			return m, cmd
 		}
 
@@ -291,11 +288,17 @@ func (m *queuesListView) deleteQueue() tea.Cmd {
 }
 
 func (m queuesListView) View() string {
-	if m.mode == tableMode {
+	switch m.mode {
+	case tableMode:
 		return m.tableModel.View()
+	case createFormMode:
+		return m.queueCreateForm.View()
+	case editFormMode:
+		return m.queueEditForm.View()
+	default:
+		slog.Error("invalid queue list mode", "mode", m.mode)
+		return ""
 	}
-
-	return m.queueCreateForm.View()
 }
 
 func NewQueuesList(ctx context.Context, queueManager queues.QueueManager) (types.View, error) {
