@@ -314,7 +314,10 @@ func (q *queueManager) ResumeDownload(ctx context.Context, id int64) error {
 	}
 	q.mu.Unlock()
 
-	handler := downloads.NewDownloadHandler(downloadConfig, downloadChunks, limiter)
+	handler, err := downloads.NewDownloadHandler(downloadConfig, downloadChunks, limiter)
+	if err != nil {
+		return err
+	}
 
 	if err := q.setDownloadState(ctx, id, string(downloads.StateInProgress)); err != nil {
 		return err
