@@ -50,3 +50,9 @@ func createErrorCmd(errMsg types.ErrorMsg) tea.Cmd {
 		return errMsg
 	}
 }
+
+func createCmd(msg tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		return msg
+	}
+}

@@ -20,6 +20,7 @@ type DownloadHandler interface {
 
 type DownloadStatus struct {
 	ID                 int64
+	URL                string
 	ProgressPercentage float64
 	Speed              float64
 	State              DownloadState

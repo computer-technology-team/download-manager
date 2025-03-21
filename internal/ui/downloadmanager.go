@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/downloads"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/cowsay"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/generalerror"
@@ -87,8 +88,21 @@ func (d downloadManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch v := msg.(type) {
 	case events.Event:
+		var cmds []tea.Cmd
+
+		cmds = append(cmds, listenForEvent)
+
+		if v.EventType == events.DownloadCompleted {
+			status := v.Payload.(downloads.DownloadStatus)
+			cmds = append(cmds, createCmd(types.NotifMsg{
+				Msg: fmt.Sprintf("Download has finished: %s", status.URL),
+			}))
+		}
+
 		d.tabsModel, cmd = d.tabsModel.Update(msg)
-		return d, tea.Batch(cmd, listenForEvent)
+		cmds = append(cmds, cmd)
+
+		return d, tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		d.tabsModel, cmd = d.tabsModel.Update(tea.WindowSizeMsg{
 			Width:  v.Width,
@@ -278,5 +292,11 @@ func newDownloadManagerViewModel(tabsModel types.View) downloadManagerModel {
 		keymap:            defaultKeyMap(),
 		helpModel:         helpModel,
 		showNotifications: false,
+	}
+}
+
+func createCmd(msg tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		return msg
 	}
 }

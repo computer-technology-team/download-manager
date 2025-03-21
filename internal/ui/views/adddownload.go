@@ -40,6 +40,8 @@ type addDownloadFormError struct {
 	error
 }
 
+type addDownloadFormClear struct{}
+
 func (s addDownloadView) addDownloadCmd(url, fileName string, queueIDStr string) tea.Cmd {
 	return func() tea.Msg {
 		slog.Info("add download", "url", url, "queue_name", queueName, "file_name", fileName)
@@ -57,9 +59,13 @@ func (s addDownloadView) addDownloadCmd(url, fileName string, queueIDStr string)
 		if err != nil {
 			return addDownloadFormError{error: err}
 		}
-		return types.NotifMsg{
-			Msg: fmt.Sprintf("Download from %s added successfully"),
-		}
+
+		var msgs []tea.Cmd
+		msgs = append(msgs, createCmd(types.NotifMsg{
+			Msg: fmt.Sprintf("Download from %s added successfully", url),
+		}), createCmd(addDownloadFormClear{}))
+
+		return tea.BatchMsg(msgs)
 	}
 }
 
@@ -196,6 +202,39 @@ func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 		return m.handleEvent(msg)
 	case addDownloadFormError:
 		m.err = msg.error
+		return m, nil
+	case addDownloadFormClear:
+		m.err = nil
+
+		// Reset URL input to empty
+		urlInput := m.inputs[url]
+		err := urlInput.SetValue("")
+		if err != nil {
+			slog.Error("could not reset url in add download form",
+				"error", err)
+			return m, createErrorCmd(types.ErrorMsg{
+				Err: fmt.Errorf("could not reset form"),
+			})
+		}
+
+		// Reset filename input to empty
+		fileNameInput := m.inputs[fileName]
+		err = fileNameInput.SetValue("")
+		if err != nil {
+			slog.Error("could not reset file name in add download form",
+				"error", err)
+			return m, createErrorCmd(types.ErrorMsg{
+				Err: fmt.Errorf("could not reset form"),
+			})
+		}
+
+		// Reset focus to the URL field
+		m.focused = url
+		for i := range m.inputs {
+			m.inputs[i].Blur()
+		}
+		m.inputs[m.focused].Focus()
+
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.Type {
