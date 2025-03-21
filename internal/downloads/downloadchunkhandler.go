@@ -1,14 +1,11 @@
 package downloads
 
 import (
-	"bufio"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
-	"net"
+	"log/slog"
 	"net/http"
-	"net/url"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
@@ -35,90 +32,85 @@ func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) Down
 	return downChunk
 }
 
-func (chunkHandler *DownloadChunkHandler) Start(url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
-	go chunkHandler.start(url, limiter, syncWriter)
+func (chunkHandler *DownloadChunkHandler) Start(ctx context.Context, url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
+	go chunkHandler.start(ctx, url, limiter, syncWriter)
 }
 
-func (chunkHandler *DownloadChunkHandler) start(url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
+func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
 
-	conn, err := getConn(url) // connect to the proper host with the correct protocol
-	if err != nil {
-		fmt.Println("error in starting connection: ", err)
-		//TODO handle error
-	}
+	slog.Info("chunk handler started", "range_start", chunkHandler.rangeStart,
+		"range_end", chunkHandler.rangeEnd, "current_pointer", chunkHandler.currentPointer)
 
 	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer)
 
-	reader := bandwidthlimit.NewLimitedReader(context.Background(),
-		sendRequest(url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd), limiter)
+	// Use the new sendRequest that uses standard HTTP library
+	resp, err := sendRequest(ctx, url, chunkHandler.currentPointer, chunkHandler.rangeEnd)
+	if err != nil {
+		slog.Error("error sending request", "error", err)
+		//TODO handle error properly
+		return
+	}
+	defer resp.Body.Close()
+
+	reader := bandwidthlimit.NewLimitedReader(ctx, resp.Body, limiter)
+
 	for {
 		<-*chunkHandler.pausedChan
 
 		n, err := io.CopyN(writer, reader, 1<<14)
 		if err != nil {
-			fmt.Println("Error reading:", err) //TODO
+			if err == io.EOF {
+				chunkHandler.currentPointer += int64(n)
+				break
+			}
+			slog.Error("error reading from response", "error", err)
 			return
 		}
 
 		chunkHandler.currentPointer += int64(n)
-
-		if chunkHandler.currentPointer == chunkHandler.rangeEnd {
+		if chunkHandler.currentPointer >= chunkHandler.rangeEnd {
 			break // TODO free wait list
 		}
 	}
 }
 
-func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) io.ReadCloser { // send get and skip header
-	parsedURL, _ := url.Parse(requestURL)
-
-	request := fmt.Sprintf("GET %s HTTP/1.1\r\n"+
-		"Host: %s\r\n"+
-		"Range: bytes=%d-%d\r\n"+
-		"Connection: close\r\n\r\n", parsedURL.Path, parsedURL.Host, rangeStart, rangeEnd)
-	_, _ = conn.Write([]byte(request))
-
-	reader := bufio.NewReader(conn)
-	resp, err := http.ReadResponse(reader, nil)
+func sendRequest(ctx context.Context, requestURL string, rangeStart, rangeEnd int64) (*http.Response, error) {
+	// Create a new HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		fmt.Println("Error reading HTTP response:", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	// Skip the headers and read the response body directly
 
-	return resp.Body
+	// Set the Range header for partial content
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd-1))
+
+	// Create a custom transport with reasonable timeouts
+	transport := &http.Transport{
+		DisableCompression: true,
+	}
+
+	// Create a client with the custom transport
+	client := &http.Client{
+		Transport: transport,
+	}
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	// Check if we got a successful response
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("server returned non-success status: %s", resp.Status)
+	}
+
+	return resp, nil
 }
 
-func getConn(requestURL string) (net.Conn, error) {
-	parsedURL, _ := url.Parse(requestURL) // TODO handle error
-
-	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:443", parsedURL.Host))
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// tlsConn := tls.Client(conn, &tls.Config{
-	// 	InsecureSkipVerify: true, // Set to false in production for certificate verification
-	// })
-
-	// // Handshake and start the TLS connection
-	// if err := tlsConn.Handshake(); err != nil {
-	// 	fmt.Println("TLS handshake failed:", err) //
-	// }
-
-	tlsConn, err := tls.Dial("tcp", parsedURL.Host+":443", &tls.Config{
-		InsecureSkipVerify: true,
-	})
-
-	if err == nil {
-		return tlsConn, nil
-	}
-
-	conn, err := net.Dial("tcp", parsedURL.Host+":80")
-	if err == nil {
-		return conn, nil
-	}
-
-	return nil, err // failed to connect to either 443 or 80
-}
+// This function is no longer needed as we're using the standard HTTP library
+// which handles connections automatically
 
 func (DownloadHandler *DownloadChunkHandler) getRemaining() int64 {
 	return DownloadHandler.rangeEnd - DownloadHandler.currentPointer
