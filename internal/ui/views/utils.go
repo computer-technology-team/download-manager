@@ -3,6 +3,10 @@ package views
 import (
 	"fmt"
 	"math"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
 func BPSStepHandler(_, value int64) int64 {
@@ -38,5 +42,11 @@ func FormatBytesPerSecond(bps int64) string {
 		return fmt.Sprintf("%.2f KB/s", bytesPerSec/KB)
 	default:
 		return fmt.Sprintf("%d B/s", bps)
+	}
+}
+
+func createErrorCmd(errMsg types.ErrorMsg) tea.Cmd {
+	return func() tea.Msg {
+		return errMsg
 	}
 }
