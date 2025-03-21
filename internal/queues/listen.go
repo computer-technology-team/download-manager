@@ -17,9 +17,10 @@ func Listen(q QueueManager, ctx context.Context) {
 			id := event.Payload.(events.DownloadFailedEvent).ID
 			q.DownloadFailed(ctx, id)
 		case events.DownloadProgressed:
-			q.upsertChunks(ctx, event.Payload.(downloads.DownloadStatus))
+			q.UpsertChunks(ctx, event.Payload.(downloads.DownloadStatus))
 		case events.DownloadCompleted:
-			handleDownloadCompleted(ctx, q, event.Payload)
+			id := event.Payload.(events.DownloadFailedEvent).ID
+			q.DownloadCompleted(ctx, id)
 		default:
 			slog.Error("Unknown Event type", "eventType", event.EventType)
 		}
@@ -28,11 +29,4 @@ func Listen(q QueueManager, ctx context.Context) {
 			Payload:   event.Payload,
 		}
 	}
-}
-
-func handleDownloadCompleted(ctx context.Context, q QueueManager, payload interface{}) {
-	id := payload.(downloads.DownloadStatus).ID
-	q.setDownloadState(ctx, id, string(downloads.StateCompleted))
-	slog.Info("Download marked as completed", "downloadID", id)
-	q.startNextDownloadIfPossibleByDownloadID(ctx, id)
 }
