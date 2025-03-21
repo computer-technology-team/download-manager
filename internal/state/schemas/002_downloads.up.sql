@@ -2,7 +2,7 @@ CREATE TABLE downloads (
     id INTEGER PRIMARY KEY AUTOINCREMENT, -- Auto-incrementing primary key
     queue_id INTEGER NOT NULL, -- Foreign key to the Queue table
     url TEXT NOT NULL,
-    save_path TEXT NOT NULL,
+    save_path TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL DEFAULT 'PAUSED',
     retries INTEGER NOT NULL DEFAULT 0,
 

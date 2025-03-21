@@ -45,7 +45,7 @@ func (l *Limiter) SetBandwidth(bytesPerSecond int64) {
 
 	// Convert bytes per second to tokens per second
 	// Each token represents 1 byte
-	l.limiter = rate.NewLimiter(rate.Limit(bytesPerSecond), int(bytesPerSecond))
+	l.limiter = rate.NewLimiter(rate.Limit(bytesPerSecond), max(int(bytesPerSecond), 1<<16))
 	l.unlimited = false
 }
 

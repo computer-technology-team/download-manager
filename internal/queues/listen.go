@@ -24,7 +24,7 @@ func Listen(q QueueManager, ctx context.Context) {
 			slog.Error("Unknown Event type", "eventType", event.EventType)
 		}
 		events.GetUIEventChannel() <- events.Event{
-			EventType: events.DownloadFailed,
+			EventType: event.EventType,
 			Payload:   event.Payload,
 		}
 	}

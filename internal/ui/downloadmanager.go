@@ -40,8 +40,8 @@ func defaultKeyMap() *keymap {
 			key.WithHelp("enter", "confirm error"),
 		),
 		toggleNotifications: key.NewBinding(
-			key.WithKeys("n"),
-			key.WithHelp("n", "toggle notifications"),
+			key.WithKeys("ctrl+n"),
+			key.WithHelp("ctrl+n", "toggle notifications"),
 		),
 		dismissNotification: key.NewBinding(
 			key.WithKeys("enter"),
