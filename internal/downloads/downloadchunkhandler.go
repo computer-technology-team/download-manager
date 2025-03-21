@@ -122,7 +122,6 @@ func (chunkHandler *DownloadChunkHandler) sendRequest(ctx context.Context, reque
 	// Create a client with the custom transport and a timeout
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   time.Second * 5,
 	}
 
 	// Send the request
