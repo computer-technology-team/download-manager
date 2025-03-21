@@ -24,13 +24,11 @@ const (
 
 type StartEndTime lo.Tuple2[state.TimeValue, state.TimeValue]
 
-// KeyMap defines the keybindings for the start-end time component
 type KeyMap struct {
 	Next key.Binding
 	Prev key.Binding
 }
 
-// DefaultKeyMap returns the default keybindings
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		Next: key.NewBinding(
@@ -51,7 +49,6 @@ type Model struct {
 	keyMap    KeyMap
 }
 
-// Blur implements types.Input.
 func (m *Model) Blur() {
 	switch m.focused {
 	case startTimeFocused:
@@ -62,7 +59,6 @@ func (m *Model) Blur() {
 
 }
 
-// Error implements types.Input.
 func (m *Model) Error() error {
 	return errors.Join(m.startTimeError(), m.endTimeError())
 }
@@ -81,21 +77,17 @@ func (m Model) endTimeError() error {
 	return nil
 }
 
-// Focus implements types.Input.
 func (m *Model) Focus() tea.Cmd {
 	m.focused = startTimeFocused
 
 	return m.startTime.Focus()
 }
 
-// FullHelp implements types.Input.
 func (m *Model) FullHelp() [][]key.Binding {
 	var bindings [][]key.Binding
 
-	// Add navigation bindings
 	bindings = append(bindings, []key.Binding{m.keyMap.Next, m.keyMap.Prev})
 
-	// Add the focused input's bindings
 	switch m.focused {
 	case startTimeFocused:
 		bindings = append(bindings, m.startTime.FullHelp()...)
@@ -106,7 +98,6 @@ func (m *Model) FullHelp() [][]key.Binding {
 	return bindings
 }
 
-// Init implements types.Input.
 func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.startTime.Init(),
@@ -114,7 +105,6 @@ func (m *Model) Init() tea.Cmd {
 	)
 }
 
-// SetValue implements types.Input.
 func (m *Model) SetValue(value StartEndTime) error {
 	startErr := m.startTime.SetValue(value.A)
 	endErr := m.endTime.SetValue(value.B)
@@ -126,11 +116,9 @@ func (m *Model) SetValue(value StartEndTime) error {
 	return nil
 }
 
-// ShortHelp implements types.Input.
 func (m *Model) ShortHelp() []key.Binding {
 	bindings := []key.Binding{m.keyMap.Next, m.keyMap.Prev}
 
-	// Add the focused input's bindings
 	switch m.focused {
 	case startTimeFocused:
 		bindings = append(bindings, m.startTime.ShortHelp()...)
@@ -141,14 +129,12 @@ func (m *Model) ShortHelp() []key.Binding {
 	return bindings
 }
 
-// Update implements types.Input.
 func (m *Model) Update(msg tea.Msg) (types.Input[StartEndTime], tea.Cmd) {
 	var cmds []tea.Cmd
 
-	// Handle key messages differently from other messages
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle navigation between inputs
+
 		switch {
 		case key.Matches(msg, m.keyMap.Next):
 			if m.focused == startTimeFocused {
@@ -166,7 +152,6 @@ func (m *Model) Update(msg tea.Msg) (types.Input[StartEndTime], tea.Cmd) {
 			}
 		}
 
-		// Forward key messages only to the focused input based on the focused integer
 		switch m.focused {
 		case startTimeFocused:
 			updatedInput, cmd := m.startTime.Update(msg)
@@ -194,7 +179,7 @@ func (m *Model) Update(msg tea.Msg) (types.Input[StartEndTime], tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	default:
-		// For non-key messages, send to both inputs
+
 		startInput, startCmd := m.startTime.Update(msg)
 		m.startTime = startInput.(*timeinput.Model)
 
@@ -207,7 +192,6 @@ func (m *Model) Update(msg tea.Msg) (types.Input[StartEndTime], tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// Value implements types.Input.
 func (m *Model) Value() StartEndTime {
 	return StartEndTime{
 		A: m.startTime.Value(),
@@ -215,7 +199,6 @@ func (m *Model) Value() StartEndTime {
 	}
 }
 
-// View implements types.Input.
 func (m *Model) View() string {
 	startLabel := lipgloss.NewStyle().
 		Bold(true).
@@ -231,7 +214,7 @@ func (m *Model) View() string {
 	return lipgloss.JoinHorizontal(
 		lipgloss.Center,
 		startTimeView,
-		"   ", // Add some spacing between the inputs
+		"   ", 
 		endTimeView,
 	)
 }

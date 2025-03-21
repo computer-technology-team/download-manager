@@ -44,14 +44,12 @@ var queuesColumns = []table.Column{
 	{Title: "Start - End Time", Width: 10},
 }
 
-// KeyMap defines the keybindings for the queues list view
 type queueListKeyMap struct {
 	EditQueue   key.Binding
 	NewQueue    key.Binding
 	DeleteQueue key.Binding
 }
 
-// DefaultKeyMap returns the default keybindings
 func DefaultQueueListKeyMap() queueListKeyMap {
 	return queueListKeyMap{
 		NewQueue: key.NewBinding(
@@ -214,7 +212,7 @@ func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	case tea.KeyMsg:
 		switch m.mode {
 		case tableMode:
-			// Handle table mode key presses
+
 			switch {
 			case key.Matches(msg, m.keyMap.NewQueue):
 				return m, m.switchToCreateFormMode()

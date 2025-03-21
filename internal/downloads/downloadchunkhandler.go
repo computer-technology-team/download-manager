@@ -51,7 +51,6 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 
 	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer)
 
-	// Use the new sendRequest that uses standard HTTP library
 	resp, err := chunkHandler.sendRequest(ctx, url, chunkHandler.currentPointer, chunkHandler.rangeEnd)
 	if err != nil {
 		slog.Error("error sending request", "error", err)
@@ -96,34 +95,30 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 }
 
 func (chunkHandler *DownloadChunkHandler) sendRequest(ctx context.Context, requestURL string, rangeStart, rangeEnd int64) (*http.Response, error) {
-	// Create a new HTTP request
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	if !chunkHandler.singlePart {
-		// Set the Range header for partial content
+
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd-1))
 	}
 
-	// Create a custom transport with shorter timeouts
 	transport := &http.Transport{
 		DisableCompression: true,
 	}
 
-	// Create a client with the custom transport and a timeout
 	client := &http.Client{
 		Transport: transport,
 	}
 
-	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	// Check if we got a successful response
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		resp.Body.Close()
 		return nil, fmt.Errorf("server returned non-success status: %s", resp.Status)
@@ -131,9 +126,6 @@ func (chunkHandler *DownloadChunkHandler) sendRequest(ctx context.Context, reque
 
 	return resp, nil
 }
-
-// This function is no longer needed as we're using the standard HTTP library
-// which handles connections automatically
 
 func (DownloadHandler *DownloadChunkHandler) getRemaining() int64 {
 	return DownloadHandler.rangeEnd - DownloadHandler.currentPointer

@@ -13,12 +13,10 @@ import (
 
 var ErrInvalidValue = errors.New("value must be between min and max")
 
-// Option is a function that configures a Model
 type Option func(*Model)
 
 type StepHandler func(step int64, value int64) int64
 
-// WithStep sets the step value for the counter
 func WithStep(step int64) Option {
 	return func(m *Model) {
 		if step > 0 {
@@ -39,7 +37,6 @@ func WithMax(mx int64) Option {
 	}
 }
 
-// WithStyle sets a custom style for the counter
 func WithStyle(style lipgloss.Style) Option {
 	return func(m *Model) {
 		m.style = style
@@ -87,7 +84,7 @@ func New(opts ...Option) *Model {
 	defaultStyle := lipgloss.NewStyle().
 		Padding(0, 1).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("39")). // Brighter blue
+		BorderForeground(lipgloss.Color("39")). 
 		Bold(true)
 
 	m := &Model{
@@ -103,7 +100,6 @@ func New(opts ...Option) *Model {
 		keyMap:  defaultKeyMap(),
 	}
 
-	// Apply all options
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -111,7 +107,6 @@ func New(opts ...Option) *Model {
 	return m
 }
 
-// Value returns the current counter value
 func (m Model) Value() int64 {
 	return m.value
 }
@@ -174,13 +169,13 @@ func (m Model) View() string {
 
 	if m.focused {
 		style = style.
-			BorderForeground(lipgloss.Color("213")). // Vibrant magenta
+			BorderForeground(lipgloss.Color("213")). 
 			Foreground(lipgloss.Color("213")).
-			Background(lipgloss.Color("236")) // Dark background for contrast
+			Background(lipgloss.Color("236")) 
 	} else {
 		style = style.
-			BorderForeground(lipgloss.Color("246")). // Lighter gray for better visibility
-			Foreground(lipgloss.Color("252"))        // Even lighter gray for the text
+			BorderForeground(lipgloss.Color("246")). 
+			Foreground(lipgloss.Color("252"))        
 	}
 
 	return style.Render(fmt.Sprintf("%d", m.value))

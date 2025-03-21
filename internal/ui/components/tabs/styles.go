@@ -3,7 +3,7 @@ package tabs
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	// Simple border style
+
 	inactiveTabBorder = lipgloss.Border{
 		Top:         "─",
 		Bottom:      "─",

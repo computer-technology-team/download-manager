@@ -18,7 +18,6 @@ import (
 
 const databaseFileName = "sqlite.db"
 
-//go:embed schemas/*.sql
 var schemasFS embed.FS
 
 func SetupDatabase(ctx context.Context) (*sql.DB, error) {

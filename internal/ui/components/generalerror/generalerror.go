@@ -14,7 +14,7 @@ type generalErrorModel struct {
 }
 
 func (g generalErrorModel) View() string {
-	// Use DisableColor option to prevent terminal escape sequence issues
+
 	say, err := cowsay.Say(
 		g.err.Error(),
 		cowsay.BallonWidth(40),
@@ -22,7 +22,7 @@ func (g generalErrorModel) View() string {
 
 	if err != nil {
 		slog.Error("could not render error cowsay", "error", err)
-		// Fallback to a simple error message
+
 		return fmt.Sprintf("Error: %s", g.err.Error())
 	}
 

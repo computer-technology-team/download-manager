@@ -15,7 +15,6 @@ var (
 	ErrItemNotFound = errors.New("item not found")
 	docStyle        = lipgloss.NewStyle().Margin(1, 2)
 
-	// Style for the selected item when not focused
 	selectedItemStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#CDD6F4"))
 )
@@ -43,7 +42,6 @@ type Model struct {
 	focus bool
 }
 
-// GetSelected returns the currently selected item
 func (m *Model) GetSelected() (list.Item, bool) {
 	if m.Model.SelectedItem() == nil {
 		return nil, false
@@ -51,7 +49,6 @@ func (m *Model) GetSelected() (list.Item, bool) {
 	return m.Model.SelectedItem(), true
 }
 
-// GetSelectedTitle returns the title of the currently selected item
 func (m *Model) GetSelectedTitle() string {
 	if selected, ok := m.GetSelected(); ok {
 		return selected.(Item).Title()
@@ -59,12 +56,10 @@ func (m *Model) GetSelectedTitle() string {
 	return "None selected"
 }
 
-// Blur implements types.Input.
 func (m *Model) Blur() {
 	m.focus = false
 }
 
-// Focus implements types.Input.
 func (m *Model) Focus() tea.Cmd {
 	m.focus = true
 	return nil
@@ -83,14 +78,14 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (types.Input[string], tea.Cmd) {
-	// Only process key events when focused
+
 	if !m.focus {
 		return &m, nil
 	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// Handle window size changes
+
 		m.Model.SetWidth(msg.Width - 4)
 		m.Model.SetHeight(10)
 	}
@@ -102,22 +97,18 @@ func (m Model) Update(msg tea.Msg) (types.Input[string], tea.Cmd) {
 
 func (m Model) View() string {
 	if !m.focus {
-		// When not focused, just show the selected item
+
 		selected := m.GetSelectedTitle()
 		return selectedItemStyle.Render(selected)
 	}
 
-	// When focused, show the list with a reasonable height
-	// Setting to 10 to ensure items are visible (3 is too small)
 	m.Model.SetHeight(10)
 
-	// Make sure the list is visible by setting appropriate styles
 	m.Model.Styles.Title = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#89B4FA")).
 		MarginLeft(2)
 
-	// Ensure the selected item is visible
 	if m.Model.Index() < 0 && len(m.Model.Items()) > 0 {
 		m.Model.Select(0)
 	}
@@ -157,30 +148,25 @@ func (m *Model) FindItemIdx(id string) (idx int, found bool) {
 }
 
 func New(title string, barItemNameSingular, barItemNamePlural string, items []list.Item) *Model {
-	// Create a delegate with custom styles
+
 	delegate := list.NewDefaultDelegate()
 
-	// Customize the delegate styles to ensure visibility
 	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
 		Foreground(lipgloss.Color("#F38BA8")).
 		Bold(true)
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
 		Foreground(lipgloss.Color("#CBA6F7"))
 
-	// Create the list with initial dimensions
 	listModel := list.New(items, delegate, 30, 10)
 	listModel.Title = title
 
-	// Set custom keybindings
 	listModel.KeyMap.CursorDown.SetKeys("p")
 	listModel.KeyMap.CursorUp.SetKeys("n")
 	listModel.KeyMap.CursorDown.SetHelp("p", "prev")
 	listModel.KeyMap.CursorUp.SetHelp("n", "next")
 
-	// Set initial selection
 	listModel.Select(0)
 
-	// Add help text
 	listModel.SetStatusBarItemName(barItemNameSingular, barItemNamePlural)
 	listModel.SetShowStatusBar(true)
 	listModel.SetShowTitle(true)

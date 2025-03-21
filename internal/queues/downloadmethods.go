@@ -193,7 +193,7 @@ func (q *queueManager) DeleteDownload(ctx context.Context, id int64) error {
 		slog.Error("failed to get download details", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to get download details: %w", err)
 	}
-	queueID := currentDownload.QueueID // we need the queueID to for starting a new download
+	queueID := currentDownload.QueueID 
 
 	if err := q.queries.DeleteDownload(ctx, id); err != nil {
 		slog.Error("failed to delete download", "downloadID", id, "error", err)

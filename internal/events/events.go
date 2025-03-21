@@ -31,7 +31,6 @@ func GetEventChannel() chan Event {
 	return eventChannel
 }
 
-// UI socket
 func GetUIEventChannel() chan Event {
 	if uiEventChannel == nil {
 		uiEventChannel = make(chan Event, chanSize)

@@ -5,7 +5,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Colors used in the table styles
 var (
 	lightGray  = lipgloss.Color("#CCCCCC")
 	headerFg   = lipgloss.Color("#FFFDF5")
@@ -13,7 +12,6 @@ var (
 	selectedFg = lipgloss.Color("#2D9CDB")
 )
 
-// Table styles
 var tableStyles = table.Styles{
 	Header: lipgloss.NewStyle().
 		Bold(true).

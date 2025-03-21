@@ -16,7 +16,6 @@ func (s sampleView) FullHelp() [][]key.Binding {
 	return [][]key.Binding{s.ShortHelp()}
 }
 
-// ShortHelp implements types.Pane.
 func (s sampleView) ShortHelp() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithHelp("some key", "some help")),

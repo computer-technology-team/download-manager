@@ -81,7 +81,6 @@ func (m Model) View() string {
 		buttonViews = append(buttonViews, style.Render(button.Label()))
 	}
 
-	// Use lipgloss to place buttons in a horizontal row
 	return lipgloss.JoinHorizontal(lipgloss.Top, buttonViews...)
 }
 
@@ -103,12 +102,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// ShortHelp returns keybindings to be shown in the mini help view
 func (m Model) ShortHelp() []key.Binding {
 	return []key.Binding{m.keyMap.Left, m.keyMap.Right}
 }
 
-// FullHelp returns keybindings for the expanded help view
 func (m Model) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{m.keyMap.Left, m.keyMap.Right},
