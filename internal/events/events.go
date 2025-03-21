@@ -8,6 +8,7 @@ const (
 	DownloadFailed EventType = iota
 	DownloadProgressed
 	DownloadCompleted
+	DownloadStateChanged
 
 	QueueCreated
 	QueueDeleted

@@ -11,14 +11,17 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/computer-technology-team/download-manager.git/internal/events"
+	"github.com/computer-technology-team/download-manager.git/internal/ui/components/cowsay"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/generalerror"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
 type keymap struct {
-	helpToggle   key.Binding
-	quit         key.Binding
-	confirmError key.Binding
+	helpToggle          key.Binding
+	quit                key.Binding
+	confirmError        key.Binding
+	toggleNotifications key.Binding
+	dismissNotification key.Binding
 }
 
 func defaultKeyMap() *keymap {
@@ -35,6 +38,14 @@ func defaultKeyMap() *keymap {
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "confirm error"),
 		),
+		toggleNotifications: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "toggle notifications"),
+		),
+		dismissNotification: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "dismiss notification"),
+		),
 	}
 }
 
@@ -48,20 +59,22 @@ type downloadManagerModel struct {
 
 	keymap *keymap
 
-	generalErrors []types.Viewable
-	height        int
-	width         int
+	generalErrors     []types.Viewable
+	notifications     []types.Viewable
+	showNotifications bool
+	height            int
+	width             int
 }
 
 // FullHelp implements help.KeyMap.
 func (d downloadManagerModel) FullHelp() [][]key.Binding {
-	return append([][]key.Binding{{d.keymap.helpToggle, d.keymap.quit, d.keymap.confirmError}},
+	return append([][]key.Binding{{d.keymap.helpToggle, d.keymap.quit, d.keymap.confirmError, d.keymap.toggleNotifications}},
 		d.tabsModel.FullHelp()...)
 }
 
 // ShortHelp implements help.KeyMap.
 func (d downloadManagerModel) ShortHelp() []key.Binding {
-	return append([]key.Binding{d.keymap.helpToggle, d.keymap.quit, d.keymap.confirmError}, d.tabsModel.ShortHelp()...)
+	return append([]key.Binding{d.keymap.helpToggle, d.keymap.quit, d.keymap.confirmError, d.keymap.toggleNotifications}, d.tabsModel.ShortHelp()...)
 }
 
 func (d downloadManagerModel) Init() tea.Cmd {
@@ -86,9 +99,28 @@ func (d downloadManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case types.ErrorMsg:
 		d.generalErrors = append(d.generalErrors, generalerror.New(v))
 		return d, nil
+	case types.NotifMsg:
+		d.notifications = append(d.notifications, cowsay.New(v.Msg))
+		// Show notifications automatically when a new one arrives
+		if len(d.notifications) > 0 && !d.showNotifications {
+			d.showNotifications = true
+		}
+		return d, nil
 	case tea.KeyMsg:
 		if len(d.generalErrors) > 0 && key.Matches(v, d.keymap.confirmError) {
 			d.generalErrors = lo.Slice(d.generalErrors, 0, len(d.generalErrors)-1)
+			return d, nil
+		} else if key.Matches(v, d.keymap.toggleNotifications) {
+			// Toggle notifications view
+			d.showNotifications = !d.showNotifications
+			return d, nil
+		} else if d.showNotifications && len(d.notifications) > 0 && key.Matches(v, d.keymap.dismissNotification) {
+			// Dismiss the latest notification
+			d.notifications = lo.Slice(d.notifications, 0, len(d.notifications)-1)
+			// If no more notifications, hide the notifications view
+			if len(d.notifications) == 0 {
+				d.showNotifications = false
+			}
 			return d, nil
 		} else if key.Matches(v, d.keymap.quit) {
 			return d, tea.Quit
@@ -96,7 +128,7 @@ func (d downloadManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d.helpModel.ShowAll = !d.helpModel.ShowAll
 			return d, nil
 		}
-		if len(d.generalErrors) > 0 {
+		if len(d.generalErrors) > 0 || d.showNotifications {
 			return d, nil
 		}
 	}
@@ -109,9 +141,7 @@ func (d downloadManagerModel) View() string {
 	helpView := d.helpModel.View(d)
 
 	var mainView string
-	if len(d.generalErrors) == 0 {
-		mainView = d.tabsModel.View()
-	} else {
+	if len(d.generalErrors) > 0 {
 		// Get the latest error message (which will be in cowsay format)
 		latestError := d.generalErrors[len(d.generalErrors)-1].View()
 
@@ -134,7 +164,7 @@ func (d downloadManagerModel) View() string {
 		// Style and center the header only
 		headerStyle := lipgloss.NewStyle().
 			Align(lipgloss.Center).
-			Width(100) // Using a large value to ensure it takes full width
+			Width(d.width) // Use the full width of the terminal
 
 		styledHeader := headerStyle.Render(errorHeader)
 
@@ -172,6 +202,68 @@ func (d downloadManagerModel) View() string {
 		)
 
 		mainView = errorSection
+	} else if d.showNotifications && len(d.notifications) > 0 {
+		// Get the latest notification message (which will be in cowsay format)
+		latestNotification := d.notifications[len(d.notifications)-1].View()
+
+		// Get notification count
+		notificationCount := len(d.notifications)
+
+		// Style for the notification counter
+		counterStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color("#4B8BBE")). // Using a blue color for notifications
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Padding(0, 1).
+			Bold(true)
+
+		// Create the counter display
+		counterDisplay := counterStyle.Render(strconv.Itoa(notificationCount))
+
+		// Header with counter
+		notificationHeader := counterDisplay + " Notifications"
+
+		// Style and center the header only
+		headerStyle := lipgloss.NewStyle().
+			Align(lipgloss.Center).
+			Width(100) // Using a large value to ensure it takes full width
+
+		styledHeader := headerStyle.Render(notificationHeader)
+
+		// Add a border around the cowsay notification to help center it without distorting
+		cowsayStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#4B8BBE")). // Blue border for notifications
+			Padding(1, 2)
+
+		// Apply the style to the cowsay notification
+		styledCowsay := cowsayStyle.Render(latestNotification)
+
+		// Add dismiss instruction below the bordered cowsay
+		dismissStyle := lipgloss.NewStyle().
+			Align(lipgloss.Center).
+			Width(d.width)
+
+		styledDismiss := dismissStyle.Render(fmt.Sprintf("Press Enter to dismiss. (1 of %d) | Press 'n' to hide notifications", notificationCount))
+
+		// Create a container style that centers the content as a whole
+		containerStyle := lipgloss.NewStyle().
+			Width(d.width).
+			Align(lipgloss.Center)
+
+		// Apply the container style to the entire notification section
+		notificationSection := containerStyle.Render(
+			lipgloss.JoinVertical(
+				lipgloss.Center,
+				styledHeader,
+				"", // Empty line for spacing
+				styledCowsay,
+				styledDismiss,
+			),
+		)
+
+		mainView = notificationSection
+	} else {
+		mainView = d.tabsModel.View()
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, helpView)
@@ -182,8 +274,9 @@ func newDownloadManagerViewModel(tabsModel types.View) downloadManagerModel {
 	helpModel.ShowAll = true
 
 	return downloadManagerModel{
-		tabsModel: tabsModel,
-		keymap:    defaultKeyMap(),
-		helpModel: helpModel,
+		tabsModel:         tabsModel,
+		keymap:            defaultKeyMap(),
+		helpModel:         helpModel,
+		showNotifications: false,
 	}
 }

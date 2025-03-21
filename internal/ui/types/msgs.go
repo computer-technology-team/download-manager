@@ -8,3 +8,7 @@ type ErrorMsg struct {
 func (e ErrorMsg) Error() string {
 	return e.Err.Error()
 }
+
+type NotifMsg struct {
+	Msg string
+}

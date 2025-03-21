@@ -45,11 +45,18 @@ type queueManager struct {
 
 // Helper function to set download state
 func (q *queueManager) setDownloadState(ctx context.Context, id int64, downloadState string) error {
-	_, err := q.queries.SetDownloadState(ctx, state.SetDownloadStateParams{State: downloadState, ID: id})
+	param := state.SetDownloadStateParams{State: downloadState, ID: id}
+	_, err := q.queries.SetDownloadState(ctx, param)
 	if err != nil {
 		slog.Error("failed to set download state", "state", downloadState, "downloadID", id, "error", err)
 		return err
 	}
+
+	events.GetUIEventChannel() <- events.Event{
+		EventType: events.DownloadStateChanged,
+		Payload:   param,
+	}
+
 	return nil
 }
 
@@ -142,7 +149,15 @@ func (q *queueManager) CreateDownload(ctx context.Context, downloadURL, fileName
 
 	events.GetUIEventChannel() <- events.Event{
 		EventType: events.DownloadCreated,
-		Payload:   download,
+		Payload: state.ListDownloadsWithQueueNameRow{
+			ID:        download.ID,
+			QueueID:   download.QueueID,
+			Url:       download.Url,
+			SavePath:  download.SavePath,
+			State:     download.State,
+			Retries:   download.Retries,
+			QueueName: queue.Name,
+		},
 	}
 
 	slog.Info("download created successfully", "downloadID", download.ID)

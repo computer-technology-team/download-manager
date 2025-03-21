@@ -79,7 +79,12 @@ func (m downloadsListView) Init() tea.Cmd { return nil }
 func (m downloadsListView) handleUpdate(msg events.Event) (types.View, tea.Cmd) {
 	switch msg.EventType {
 	case events.DownloadCreated:
+		download := msg.Payload.(state.ListDownloadsWithQueueNameRow)
+		m.downloads = append(m.downloads, download)
 
+		m.setTableRows()
+
+		return m, nil
 	case events.DownloadDeleted:
 		downloadID := msg.Payload.(int64)
 		m.downloads = lo.Filter(m.downloads, func(download state.ListDownloadsWithQueueNameRow, _ int) bool {
@@ -89,10 +94,19 @@ func (m downloadsListView) handleUpdate(msg events.Event) (types.View, tea.Cmd) 
 		m.setTableRows()
 
 		return m, nil
-	case events.DownloadProgressed:
+	// case events.DownloadProgressed:
+	// case events.DownloadFailed:
+	case events.DownloadStateChanged:
+		stateChange := msg.Payload.(state.SetDownloadStateParams)
+		for i, download := range m.downloads {
+			if download.ID == stateChange.ID {
+				m.downloads[i].State = stateChange.State
+			}
+		}
 
-	case events.DownloadFailed:
+		m.setTableRows()
 
+		return m, nil
 	}
 
 	return m, nil
@@ -174,24 +188,23 @@ func NewDownloadsList(ctx context.Context, queueManager queues.QueueManager) (ty
 		return nil, err
 	}
 
-	rows := lo.Map(downloads, func(d state.ListDownloadsWithQueueNameRow, _ int) table.Row {
-		return downloadToDownloadTableRow(d)
-	})
-
 	t := table.New(
-		table.WithRows(rows),
 		table.WithColumns(downloadsColumns),
 		table.WithFocused(true),
 		table.WithStyles(tableStyles),
 	)
 
-	return downloadsListView{
+	dv := downloadsListView{
 		tableModel:   t,
 		queueManager: queueManager,
 		keymap:       defaultDownloadsListKeyMap(),
 
 		downloads: downloads,
-	}, nil
+	}
+
+	dv.setTableRows()
+
+	return dv, nil
 }
 
 func downloadToDownloadTableRow(download state.ListDownloadsWithQueueNameRow) table.Row {

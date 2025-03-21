@@ -57,7 +57,9 @@ func (s addDownloadView) addDownloadCmd(url, fileName string, queueIDStr string)
 		if err != nil {
 			return addDownloadFormError{error: err}
 		}
-		return nil
+		return types.NotifMsg{
+			Msg: fmt.Sprintf("Download from %s added successfully"),
+		}
 	}
 }
 
