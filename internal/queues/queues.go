@@ -429,6 +429,7 @@ func (q *queueManager) init(ctx context.Context) error {
 
 		handler, err := downloads.NewDownloadHandler(download, downloadChunks, limiter)
 		if err != nil {
+			slog.Error("failed to initilize download handler", "error", err)
 			return err
 		}
 		q.inProgressHandlers[download.ID] = handler
