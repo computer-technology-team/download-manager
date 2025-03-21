@@ -2,6 +2,9 @@ package views
 
 import (
 	"context"
+
+	"errors"
+
 	"fmt"
 	"log/slog"
 
@@ -44,9 +47,9 @@ var queuesColumns = []table.Column{
 
 // KeyMap defines the keybindings for the queues list view
 type queueListKeyMap struct {
-	EditQueue key.Binding
-	NewQueue  key.Binding
-	Back      key.Binding
+	EditQueue   key.Binding
+	NewQueue    key.Binding
+	DeleteQueue key.Binding
 }
 
 // DefaultKeyMap returns the default keybindings
@@ -56,9 +59,11 @@ func DefaultQueueListKeyMap() queueListKeyMap {
 			key.WithKeys("n", "+"),
 			key.WithHelp("n/+", "new queue"),
 		),
-		Back: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "back to list"),
+		DeleteQueue: key.NewBinding(
+			key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete queue"),
+		),
+		EditQueue: key.NewBinding(
+			key.WithKeys("e"), key.WithHelp("e", "edit queue"),
 		),
 	}
 }
@@ -143,10 +148,18 @@ func (m *queuesListView) switchToCreateFormMode() tea.Cmd {
 }
 
 func (m *queuesListView) switchToEditFormMode() tea.Cmd {
+	if len(m.queues) == 0 {
+		return func() tea.Msg {
+			return types.ErrorMsg{
+				Err: errors.New("no queue to edit"),
+			}
+		}
+	}
 	m.mode = editFormMode
 	if m.queueEditForm == nil {
 		var err error
-		m.queueEditForm, err = NewQueueEditForm(state.Queue{}, m.queueManager, backToTableCmd)
+		m.queueEditForm, err = NewQueueEditForm(m.queues[m.tableModel.Cursor()], m.queueManager, backToTableCmd)
+
 		if err != nil {
 			slog.Error("could not render edit form", "error", err)
 			m.mode = tableMode
@@ -209,22 +222,16 @@ func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 				return m, m.switchToCreateFormMode()
 			case key.Matches(msg, m.keyMap.EditQueue):
 				return m, m.switchToEditFormMode()
+			case key.Matches(msg, m.keyMap.DeleteQueue):
+				return m, m.deleteQueue()
 			}
 		case createFormMode:
-			if key.Matches(msg, m.keyMap.Back) {
-				m.switchToTableMode()
-				return m, nil
-			}
 
 			formView, cmd := m.queueCreateForm.Update(msg)
 			m.queueCreateForm = &formView
 
 			return m, cmd
 		case editFormMode:
-			if key.Matches(msg, m.keyMap.Back) {
-				m.switchToTableMode()
-				return m, nil
-			}
 
 			formView, cmd := m.queueEditForm.Update(msg)
 			m.queueCreateForm = &formView
@@ -239,15 +246,48 @@ func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 		m.updateColumnWidths()
 	}
 
-	if m.mode == tableMode {
-		m.tableModel, cmd = m.tableModel.Update(msg)
-	} else {
+	var cmds []tea.Cmd
+
+	m.tableModel, cmd = m.tableModel.Update(msg)
+	cmds = append(cmds, cmd)
+
+	if m.queueCreateForm != nil {
 		var formView queueForm
 		formView, cmd = m.queueCreateForm.Update(msg)
+		cmds = append(cmds, cmd)
 		m.queueCreateForm = &formView
 	}
 
-	return m, cmd
+	if m.queueEditForm != nil {
+		var formView queueForm
+		formView, cmd = m.queueEditForm.Update(msg)
+		cmds = append(cmds, cmd)
+		m.queueEditForm = &formView
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *queuesListView) deleteQueue() tea.Cmd {
+	if len(m.queues) == 0 {
+		return func() tea.Msg {
+			return types.ErrorMsg{
+				Err: errors.New("no queue to delete"),
+			}
+		}
+	}
+
+	return func() tea.Msg {
+		currQueue := m.queues[m.tableModel.Cursor()]
+		err := m.queueManager.DeleteQueue(context.Background(), currQueue.ID)
+		if err != nil {
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not delete queue %s: %w", currQueue.Name, err),
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m queuesListView) View() string {

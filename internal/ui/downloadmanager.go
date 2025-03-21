@@ -96,6 +96,9 @@ func (d downloadManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d.helpModel.ShowAll = !d.helpModel.ShowAll
 			return d, nil
 		}
+		if len(d.generalErrors) > 0 {
+			return d, nil
+		}
 	}
 
 	d.tabsModel, cmd = d.tabsModel.Update(msg)
