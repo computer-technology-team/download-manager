@@ -2,12 +2,15 @@ package downloads
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
+	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
@@ -18,10 +21,13 @@ type DownloadChunkHandler struct {
 	rangeEnd       int64
 	currentPointer int64
 	pausedChan     *chan int
+	failedChan     chan interface{}
+	wg             *sync.WaitGroup
 	singlePart     bool
 }
 
-func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) *DownloadChunkHandler {
+func NewDownloadChunkHandler(cfg state.DownloadChunk,
+	pausedChan *chan int, failedChan chan interface{}, wg *sync.WaitGroup) *DownloadChunkHandler {
 	downChunk := DownloadChunkHandler{
 		mainDownloadID: cfg.DownloadID,
 		chunckID:       cfg.ID,
@@ -29,27 +35,33 @@ func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) *Dow
 		rangeEnd:       cfg.RangeEnd,
 		currentPointer: cfg.CurrentPointer,
 		singlePart:     cfg.SinglePart,
+		wg:             wg,
 	}
 	downChunk.pausedChan = pausedChan
 	return &downChunk
 }
 
 func (chunkHandler *DownloadChunkHandler) Start(ctx context.Context, url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
+	chunkHandler.wg.Add(1)
 	go chunkHandler.start(ctx, url, limiter, syncWriter)
 }
 
 func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
 
-	slog.Info("chunk handler started", "range_start", chunkHandler.rangeStart,
-		"range_end", chunkHandler.rangeEnd, "current_pointer", chunkHandler.currentPointer)
-
+	defer chunkHandler.wg.Done()
 	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer)
 
 	// Use the new sendRequest that uses standard HTTP library
 	resp, err := chunkHandler.sendRequest(ctx, url, chunkHandler.currentPointer, chunkHandler.rangeEnd)
 	if err != nil {
 		slog.Error("error sending request", "error", err)
-		//TODO handle error properly
+		events.GetEventChannel() <- events.Event{
+			EventType: events.DownloadFailed,
+			Payload:   events.DownloadFailedEvent{},
+		}
+
+		chunkHandler.failedChan <- 0
+
 		return
 	}
 	defer resp.Body.Close()
@@ -57,22 +69,32 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 	reader := bandwidthlimit.NewLimitedReader(ctx, resp.Body, limiter)
 
 	for {
-		<-*chunkHandler.pausedChan
-
-		n, err := io.CopyN(writer, reader, 1<<14)
-		if err != nil {
-			if err == io.EOF {
-				chunkHandler.currentPointer += int64(n)
-				break
-			}
-			slog.Error("error reading from response", "error", err)
+		select {
+		case <-*chunkHandler.pausedChan:
 			return
+		default:
+			n, err := io.CopyN(writer, reader, 1<<14)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					chunkHandler.currentPointer += int64(n)
+					break
+				}
+
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+
+				slog.Error("error reading from response", "error", err)
+				chunkHandler.failedChan <- 0
+				return
+			}
+
+			chunkHandler.currentPointer += int64(n)
+			if chunkHandler.currentPointer >= chunkHandler.rangeEnd {
+				return
+			}
 		}
 
-		chunkHandler.currentPointer += int64(n)
-		if chunkHandler.currentPointer >= chunkHandler.rangeEnd {
-			break // TODO free wait list
-		}
 	}
 }
 
