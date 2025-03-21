@@ -35,6 +35,7 @@ type downloadsListKeyMap struct {
 	Resume key.Binding
 	Pause  key.Binding
 	Retry  key.Binding
+	Delete key.Binding
 }
 
 type downloadsListView struct {
@@ -69,11 +70,11 @@ func (m *downloadsListView) updateColumnWidths() {
 }
 
 func (m downloadsListView) FullHelp() [][]key.Binding {
-	return append([][]key.Binding{{m.keymap.Pause, m.keymap.Resume, m.keymap.Retry}}, m.tableModel.KeyMap.FullHelp()...)
+	return append([][]key.Binding{{m.keymap.Pause, m.keymap.Resume, m.keymap.Retry, m.keymap.Delete}}, m.tableModel.KeyMap.FullHelp()...)
 }
 
 func (m downloadsListView) ShortHelp() []key.Binding {
-	return append(m.tableModel.KeyMap.ShortHelp(), m.keymap.Pause, m.keymap.Resume, m.keymap.Retry)
+	return append(m.tableModel.KeyMap.ShortHelp(), m.keymap.Pause, m.keymap.Resume, m.keymap.Retry, m.keymap.Delete)
 }
 
 func (m downloadsListView) Init() tea.Cmd { return nil }
@@ -145,11 +146,31 @@ func (m downloadsListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 			return m, m.resume()
 		case key.Matches(msg, m.keymap.Retry):
 			return m, m.retry()
+		case key.Matches(msg, m.keymap.Delete):
+			return m, m.delete()
 
 		}
 	}
 	m.tableModel, cmd = m.tableModel.Update(msg)
 	return m, cmd
+}
+
+func (m *downloadsListView) delete() tea.Cmd {
+	download, err := m.getUnderCursorDownload()
+	if err != nil {
+		return createErrorCmd(types.ErrorMsg{Err: err})
+	}
+
+	return func() tea.Msg {
+		err := m.queueManager.DeleteDownload(context.Background(), download.ID)
+		if err != nil {
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not resume download: %w", err),
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m *downloadsListView) pause() tea.Cmd {
