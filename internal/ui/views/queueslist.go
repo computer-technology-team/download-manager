@@ -2,7 +2,9 @@ package views
 
 import (
 	"context"
+
 	"errors"
+
 	"fmt"
 	"log/slog"
 
@@ -157,6 +159,7 @@ func (m *queuesListView) switchToEditFormMode() tea.Cmd {
 	if m.queueEditForm == nil {
 		var err error
 		m.queueEditForm, err = NewQueueEditForm(m.queues[m.tableModel.Cursor()], m.queueManager, backToTableCmd)
+
 		if err != nil {
 			slog.Error("could not render edit form", "error", err)
 			m.mode = tableMode
