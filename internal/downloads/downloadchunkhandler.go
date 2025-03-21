@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
@@ -21,13 +22,13 @@ type DownloadChunkHandler struct {
 	rangeEnd       int64
 	currentPointer int64
 	pausedChan     *chan int
-	failedChan     chan interface{}
+	failedChan     chan error
 	wg             *sync.WaitGroup
 	singlePart     bool
 }
 
 func NewDownloadChunkHandler(cfg state.DownloadChunk,
-	pausedChan *chan int, failedChan chan interface{}, wg *sync.WaitGroup) *DownloadChunkHandler {
+	pausedChan *chan int, failedChan chan error, wg *sync.WaitGroup) *DownloadChunkHandler {
 	downChunk := DownloadChunkHandler{
 		mainDownloadID: cfg.DownloadID,
 		chunckID:       cfg.ID,
@@ -36,8 +37,9 @@ func NewDownloadChunkHandler(cfg state.DownloadChunk,
 		currentPointer: cfg.CurrentPointer,
 		singlePart:     cfg.SinglePart,
 		wg:             wg,
+		failedChan:     failedChan,
+		pausedChan:     pausedChan,
 	}
-	downChunk.pausedChan = pausedChan
 	return &downChunk
 }
 
@@ -47,8 +49,8 @@ func (chunkHandler *DownloadChunkHandler) Start(ctx context.Context, url string,
 }
 
 func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
-
 	defer chunkHandler.wg.Done()
+
 	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer)
 
 	// Use the new sendRequest that uses standard HTTP library
@@ -60,7 +62,7 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 			Payload:   events.DownloadFailedEvent{},
 		}
 
-		chunkHandler.failedChan <- 0
+		chunkHandler.failedChan <- err
 
 		return
 	}
@@ -70,6 +72,8 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-*chunkHandler.pausedChan:
 			return
 		default:
@@ -85,7 +89,7 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 				}
 
 				slog.Error("error reading from response", "error", err)
-				chunkHandler.failedChan <- 0
+				chunkHandler.failedChan <- err
 				return
 			}
 
@@ -110,14 +114,15 @@ func (chunkHandler *DownloadChunkHandler) sendRequest(ctx context.Context, reque
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd-1))
 	}
 
-	// Create a custom transport with reasonable timeouts
+	// Create a custom transport with shorter timeouts
 	transport := &http.Transport{
 		DisableCompression: true,
 	}
 
-	// Create a client with the custom transport
+	// Create a client with the custom transport and a timeout
 	client := &http.Client{
 		Transport: transport,
+		Timeout:   time.Second * 5,
 	}
 
 	// Send the request

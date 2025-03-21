@@ -2,6 +2,7 @@ package bandwidthlimit
 
 import (
 	"context"
+	"errors"
 	"io"
 )
 
@@ -32,7 +33,7 @@ func (r *LimitedReader) Read(p []byte) (n int, err error) {
 		waitErr := r.limiter.Wait(r.ctx, n)
 		if waitErr != nil {
 			// Context canceled or deadline exceeded
-			return n, waitErr
+			return n, errors.Join(waitErr, err)
 		}
 	}
 

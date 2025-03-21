@@ -19,7 +19,7 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
-const progressUpdatePeriod int = 1
+const progressUpdatePeriod int = 10
 
 const movingAverageScale float64 = .75 // new average = old * (1 - alpha) + current * alpha
 const numberOfChuncks = 10
@@ -40,7 +40,7 @@ type defaultDownloader struct {
 	ctxCancel     context.CancelFunc
 	writer        *SynchronizedFileWriter
 	wg            sync.WaitGroup
-	failedChannel chan interface{}
+	failedChannel chan error
 }
 
 func (d *defaultDownloader) keepTrackOfProgress() {
@@ -48,6 +48,7 @@ func (d *defaultDownloader) keepTrackOfProgress() {
 	for {
 		select {
 		case <-d.ctx.Done():
+			slog.Info("context canceled in keep track")
 			d.reportProgress()
 			return
 		case <-time.After(time.Second * time.Duration(progressUpdatePeriod)):
@@ -177,15 +178,16 @@ func getContentSize(header http.Header) (int64, error) {
 }
 
 func (d *defaultDownloader) Pause() error {
-	if d.state == StateInProgress {
-		if d.ctxCancel != nil {
-			d.ctxCancel()
-		}
-		close(*d.pausedChan)
-
-		d.wg.Wait()
-		d.writer.Close()
+	if d.ctxCancel != nil {
+		d.ctxCancel()
+		slog.Info("context canceled")
 	}
+	close(*d.pausedChan)
+
+	d.wg.Wait()
+	d.writer.Close()
+
+	slog.Info("paused")
 	return nil
 }
 
@@ -237,13 +239,13 @@ func (d *defaultDownloader) status() DownloadStatus {
 
 func (d *defaultDownloader) listenForFailiure() {
 	select {
-	case <-d.failedChannel:
-		err := d.Pause()
-		if err != nil {
-			events.GetEventChannel() <- events.Event{
-				EventType: events.DownloadFailed,
-				Payload:   events.DownloadFailedEvent{Error: err},
-			}
+	case err := <-d.failedChannel:
+		slog.Info("failed channel")
+		_ = d.Pause()
+
+		events.GetEventChannel() <- events.Event{
+			EventType: events.DownloadFailed,
+			Payload:   events.DownloadFailedEvent{Error: err},
 		}
 		return
 	case <-d.ctx.Done():

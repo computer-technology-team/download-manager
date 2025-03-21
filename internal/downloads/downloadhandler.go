@@ -19,7 +19,6 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		return nil, fmt.Errorf("error checking file at %s: %w", savePath, err)
 	}
 	pausedChan := make(chan int, 1)
-	close(pausedChan)
 
 	defDow := defaultDownloader{
 		id:            downloadConfig.ID,
@@ -36,7 +35,7 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		ctx:           nil,
 		ctxCancel:     nil,
 		writer:        NewSynchronizedFileWriter(downloadConfig.SavePath),
-		failedChannel: make(chan interface{}),
+		failedChannel: make(chan error, numberOfChuncks),
 		wg:            sync.WaitGroup{},
 	}
 
