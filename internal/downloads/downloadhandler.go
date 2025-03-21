@@ -1,13 +1,23 @@
 package downloads
 
 import (
+	"fmt"
+	"os"
 	"sync"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
-func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, limiter *bandwidthlimit.Limiter) DownloadHandler {
+func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, limiter *bandwidthlimit.Limiter) (DownloadHandler, error) {
+
+	savePath := downloadConfig.SavePath
+
+	if _, err := os.Stat(savePath); err == nil {
+		return nil, fmt.Errorf("file already exists at %s", savePath)
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("error checking file at %s: %w", savePath, err)
+	}
 	pausedChan := make(chan int, 1)
 	close(pausedChan)
 
@@ -48,5 +58,5 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		}
 	}
 
-	return &defDow
+	return &defDow, nil
 }

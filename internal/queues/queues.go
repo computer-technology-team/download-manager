@@ -314,7 +314,10 @@ func (q *queueManager) ResumeDownload(ctx context.Context, id int64) error {
 	}
 	q.mu.Unlock()
 
-	handler := downloads.NewDownloadHandler(downloadConfig, downloadChunks, limiter)
+	handler, err := downloads.NewDownloadHandler(downloadConfig, downloadChunks, limiter)
+	if err != nil {
+		return err
+	}
 
 	if err := q.setDownloadState(ctx, id, string(downloads.StateInProgress)); err != nil {
 		return err
@@ -409,7 +412,10 @@ func (q *queueManager) init(ctx context.Context) error {
 			return fmt.Errorf("limiter not found for queue %d", download.QueueID)
 		}
 
-		handler := downloads.NewDownloadHandler(download, downloadChunks, limiter)
+		handler, err := downloads.NewDownloadHandler(download, downloadChunks, limiter)
+		if err != nil {
+			return err
+		}
 		q.inProgressHandlers[download.ID] = handler
 
 		if err := handler.Start(); err != nil {
