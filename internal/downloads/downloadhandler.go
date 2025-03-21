@@ -33,17 +33,15 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 
 		for i, chunk := range downloadChuncks {
 
-			handler := NewDownloadChunkHandler(state.DownloadChunk{
-				ID:             chunk.ID,
-				RangeStart:     chunk.RangeStart,
-				RangeEnd:       chunk.RangeEnd,
-				CurrentPointer: chunk.CurrentPointer,
-				DownloadID:     chunk.DownloadID,
-			}, defDow.pausedChan)
+			handler := NewDownloadChunkHandler(chunk, defDow.pausedChan)
 
-			chunkhandlersList[i] = &handler
+			chunkhandlersList[i] = handler
 		}
 		defDow.chunkHandlers = chunkhandlersList
+	} else if len(downloadChuncks) == 1 && downloadChuncks[0].SinglePart {
+		defDow.chunkHandlers = []*DownloadChunkHandler{
+			NewDownloadChunkHandler(downloadChuncks[0], defDow.pausedChan),
+		}
 	}
 
 	return &defDow

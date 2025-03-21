@@ -18,18 +18,20 @@ type DownloadChunkHandler struct {
 	rangeEnd       int64
 	currentPointer int64
 	pausedChan     *chan int
+	singlePart     bool
 }
 
-func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) DownloadChunkHandler {
+func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) *DownloadChunkHandler {
 	downChunk := DownloadChunkHandler{
 		mainDownloadID: cfg.DownloadID,
 		chunckID:       cfg.ID,
 		rangeStart:     cfg.RangeStart,
 		rangeEnd:       cfg.RangeEnd,
 		currentPointer: cfg.CurrentPointer,
+		singlePart:     cfg.SinglePart,
 	}
 	downChunk.pausedChan = pausedChan
-	return downChunk
+	return &downChunk
 }
 
 func (chunkHandler *DownloadChunkHandler) Start(ctx context.Context, url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
@@ -44,7 +46,7 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer)
 
 	// Use the new sendRequest that uses standard HTTP library
-	resp, err := sendRequest(ctx, url, chunkHandler.currentPointer, chunkHandler.rangeEnd)
+	resp, err := chunkHandler.sendRequest(ctx, url, chunkHandler.currentPointer, chunkHandler.rangeEnd)
 	if err != nil {
 		slog.Error("error sending request", "error", err)
 		//TODO handle error properly
@@ -74,15 +76,17 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 	}
 }
 
-func sendRequest(ctx context.Context, requestURL string, rangeStart, rangeEnd int64) (*http.Response, error) {
+func (chunkHandler *DownloadChunkHandler) sendRequest(ctx context.Context, requestURL string, rangeStart, rangeEnd int64) (*http.Response, error) {
 	// Create a new HTTP request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set the Range header for partial content
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd-1))
+	if !chunkHandler.singlePart {
+		// Set the Range header for partial content
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rangeStart, rangeEnd-1))
+	}
 
 	// Create a custom transport with reasonable timeouts
 	transport := &http.Transport{

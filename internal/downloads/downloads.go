@@ -3,6 +3,7 @@ package downloads
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"os"
@@ -98,12 +99,25 @@ func (d *defaultDownloader) Start() error {
 		// TODO log.Fatal(err)
 	}
 
-	d.url = resp.Request.URL.String()
-
 	d.writer = NewSynchronizedFileWriter(d.savePath)
-	segmentsList := d.getChunkSegments(resp.Header)
 
-	if len(d.chunkHandlers) != numberOfChuncks {
+	size, err := getContentSize(resp.Header)
+	if err != nil {
+		slog.Error("could not get content size", "error", err)
+		return err
+	}
+
+	var segmentsList [][]int64
+	var acceptsRanges bool
+
+	if doesAccpetRanges(resp) {
+		acceptsRanges = true
+		segmentsList = d.getChunkSegments(resp.Header)
+	} else {
+		segmentsList = [][]int64{{0, size}}
+	}
+
+	if d.chunkHandlers == nil {
 		chunkhandlersList := make([]*DownloadChunkHandler, 0)
 
 		for _, segment := range segmentsList {
@@ -115,9 +129,10 @@ func (d *defaultDownloader) Start() error {
 				RangeEnd:       r,
 				CurrentPointer: l,
 				DownloadID:     d.id,
+				SinglePart:     !acceptsRanges,
 			}, d.pausedChan)
 
-			chunkhandlersList = append(chunkhandlersList, &handler)
+			chunkhandlersList = append(chunkhandlersList, handler)
 		}
 
 		d.chunkHandlers = chunkhandlersList
@@ -133,30 +148,33 @@ func (d *defaultDownloader) Start() error {
 }
 
 func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
-	//TODO this is a prototype
-
-	size, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
-	d.size = size
+	var err error
+	d.size, err = getContentSize(header)
 	if err != nil {
-		fmt.Println("no content length header", err) // TODO
+		//TODO: fix this
+		return nil
 	}
 
 	if header.Get("Accept-Ranges") != "bytes" {
 		fmt.Println("server does not accept range requests") // TODO need an if on test mode
-		return [][]int64{{0, int64(size)}}
+		return [][]int64{{0, int64(d.size)}}
 	}
 
-	chunkSize := int64(math.Ceil(float64(size) / numberOfChuncks))
+	chunkSize := int64(math.Ceil(float64(d.size) / numberOfChuncks))
 
 	segmentsList := make([][]int64, 0)
 
 	var i int64
-	for ; chunkSize*i < size; i++ {
-		segmentsList = append(segmentsList, []int64{i * chunkSize, min((i+1)*chunkSize, size)})
+	for ; chunkSize*i < d.size; i++ {
+		segmentsList = append(segmentsList, []int64{i * chunkSize, min((i+1)*chunkSize, d.size)})
 	}
 	fmt.Println(len(segmentsList))
 
 	return segmentsList
+}
+
+func getContentSize(header http.Header) (int64, error) {
+	return strconv.ParseInt(header.Get("Content-Length"), 10, 64)
 }
 
 func (d *defaultDownloader) Pause() error {
@@ -173,7 +191,10 @@ func (d *defaultDownloader) Pause() error {
 }
 
 func (d *defaultDownloader) Cancel() error {
-	d.Pause()
+	err := d.Pause()
+	if err != nil {
+		return err
+	}
 
 	if d.ctxCancel != nil {
 		d.ctxCancel()
@@ -216,4 +237,12 @@ func (d *defaultDownloader) status() DownloadStatus {
 	status.DownloadChuncks = chunkList
 
 	return status
+}
+
+func doesAccpetRanges(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+
+	return resp.Header.Get("Accept-Ranges") == "bytes"
 }
