@@ -30,7 +30,7 @@ const (
 
 var (
 	ErrURLRequired        = errors.New("URL is required")
-	ErrURLInvalidProtocol = errors.New("URL must start with http:
+	ErrURLInvalidProtocol = errors.New("URL must start with http:// or https://")
 	ErrURLParseFailed     = errors.New("failed to parse the URL")
 	ErrURLHostEmpty       = errors.New("URL host can not be empty")
 )
@@ -102,7 +102,7 @@ func initialModel(ctx context.Context, queueManager queues.QueueManager) (types.
 	}
 
 	inputsUrl := textinput.New()
-	inputsUrl.Placeholder = "https:
+	inputsUrl.Placeholder = "https://example.com"
 	inputsUrl.Focus()
 	inputsUrl.Width = 50
 	inputsUrl.Prompt = ""
