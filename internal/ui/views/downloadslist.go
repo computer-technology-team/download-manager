@@ -3,12 +3,14 @@ package views
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/downloads"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
@@ -67,11 +69,11 @@ func (m *downloadsListView) updateColumnWidths() {
 }
 
 func (m downloadsListView) FullHelp() [][]key.Binding {
-	return m.tableModel.KeyMap.FullHelp()
+	return append([][]key.Binding{{m.keymap.Pause, m.keymap.Resume, m.keymap.Retry}}, m.tableModel.KeyMap.FullHelp()...)
 }
 
 func (m downloadsListView) ShortHelp() []key.Binding {
-	return m.tableModel.KeyMap.ShortHelp()
+	return append(m.tableModel.KeyMap.ShortHelp(), m.keymap.Pause, m.keymap.Resume, m.keymap.Retry)
 }
 
 func (m downloadsListView) Init() tea.Cmd { return nil }
@@ -94,8 +96,20 @@ func (m downloadsListView) handleUpdate(msg events.Event) (types.View, tea.Cmd) 
 		m.setTableRows()
 
 		return m, nil
-	// case events.DownloadProgressed:
-	// case events.DownloadFailed:
+	case events.DownloadProgressed:
+		status := msg.Payload.(downloads.DownloadStatus)
+
+		for i, download := range m.downloads {
+			if download.ID == status.ID {
+				m.downloads[i].State = fmt.Sprintf("%f - %s", status.ProgressPercentage,
+					FormatBytesPerSecond(int64(status.Speed)))
+			}
+		}
+
+		m.setTableRows()
+
+		return m, nil
+
 	case events.DownloadStateChanged:
 		stateChange := msg.Payload.(state.SetDownloadStateParams)
 		for i, download := range m.downloads {
