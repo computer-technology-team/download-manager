@@ -115,6 +115,8 @@ func (q *queueManager) init(ctx context.Context) error {
 		slog.Info("resumed in-progress download during initialization", "downloadID", download.ID)
 	}
 
+	go q.scheduler(ctx)
+
 	slog.Info("initialization completed successfully")
 	return nil
 }

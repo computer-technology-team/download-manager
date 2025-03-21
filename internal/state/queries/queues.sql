@@ -20,3 +20,13 @@ RETURNING *;
 -- name: DeleteQueue :exec
 DELETE FROM queues
 WHERE id = ?;
+
+-- name: CountInProgressDownloadsInQueue :one
+SELECT COUNT(*) 
+FROM downloads
+WHERE queue_id = ? AND status = 'IN_PROGRESS';
+
+-- name: UpdateInProgressToPendingInQueue :exec
+UPDATE downloads
+SET status = 'PENDING'
+WHERE status = 'IN_PROGRESS' AND queue_id = ?;

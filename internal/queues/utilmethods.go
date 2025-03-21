@@ -30,22 +30,12 @@ func (q *queueManager) setDownloadState(ctx context.Context, id int64, downloadS
 
 // Helper function to start the next download of a queue if it has capacity
 func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID int64) error {
-	var activeDownloads int64 = 0
+	activeDownloads, err := q.queries.CountInProgressDownloadsInQueue(ctx, queueID)
 
-	// Count the number of active downloads for the given queueID
-	q.mu.RLock()
-	for id := range q.inProgressHandlers {
-		download, err := q.queries.GetDownload(ctx, id)
-		if err != nil {
-			q.mu.RUnlock()
-			slog.Error("failed to get download details", "downloadID", id, "error", err)
-			return fmt.Errorf("failed to get download details: %w", err)
-		}
-		if download.QueueID == queueID {
-			activeDownloads++
-		}
+	if err != nil {
+		slog.Error("could not get the number of in-progress downloads", "queueID", queueID, "error", err)
+		return fmt.Errorf("could not get the number of in-progress downloads: %w", err)
 	}
-	q.mu.RUnlock()
 
 	// Get the queue's MaxConcurrent limit from the database
 	queue, err := q.queries.GetQueue(ctx, queueID)
