@@ -7,3 +7,10 @@ sql:
       go:
         package: "state"
         out: "../internal/state/"
+        overrides:
+          - column: "queues.start_download"
+            go_type:
+              type: "TimeValue"
+          - column: "queues.end_download"
+            go_type:
+              type: "TimeValue"

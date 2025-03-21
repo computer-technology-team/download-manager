@@ -3,13 +3,18 @@ package views
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	neturl "net/url"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/components/listinput"
@@ -27,11 +32,31 @@ const (
 var (
 	ErrURLRequired        = errors.New("URL is required")
 	ErrURLInvalidProtocol = errors.New("URL must start with http:// or https://")
+	ErrURLParseFailed     = errors.New("failed to parse the URL")
+	ErrURLHostEmpty       = errors.New("URL host can not be empty")
 )
 
-func addDownloadCmd(url, queueName, fileName string) tea.Cmd {
+type addDownloadFormError struct {
+	error
+}
+
+func (s addDownloadView) addDownloadCmd(url, fileName string, queueIDStr string) tea.Cmd {
 	return func() tea.Msg {
 		slog.Info("add download", "url", url, "queue_name", queueName, "file_name", fileName)
+
+		queueID, err := strconv.ParseInt(queueIDStr, 10, 64)
+		if err != nil {
+			slog.Error("could not parse queue id in add download", "queue_id_str", queueIDStr)
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not parse queue id to add download for url: %s\n error: %w",
+					url, err),
+			}
+		}
+
+		err = s.queueManager.CreateDownload(context.Background(), url, fileName, queueID)
+		if err != nil {
+			return addDownloadFormError{error: err}
+		}
 		return nil
 	}
 }
@@ -81,13 +106,28 @@ func initialModel(ctx context.Context, queueManager queues.QueueManager) (types.
 		if s == "" {
 			return ErrURLRequired
 		}
-		if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+
+		parsedUrl, err := neturl.Parse(s)
+		if err != nil {
+			return errors.Join(ErrURLParseFailed, err)
+		}
+
+		if parsedUrl.Scheme != "https" && parsedUrl.Scheme != "http" {
 			return ErrURLInvalidProtocol
 		}
+
+		if parsedUrl.Host == "" {
+			return ErrURLHostEmpty
+		}
+
 		return nil
 	}
 
-	inputsQueueName := listinput.New("Select The Queue", "queue", "queues")
+	queueList := lo.Map(queues, func(q state.Queue, _ int) list.Item {
+		return queueToAddDownloadQueueItem(q)
+	})
+
+	inputsQueueName := listinput.New("Select The Queue", "queue", "queues", queueList)
 
 	inputsFileName := textinput.New()
 	inputsFileName.Placeholder = "Leave empty to use filename from URL"
@@ -116,10 +156,45 @@ func (m addDownloadView) Init() tea.Cmd {
 	})...)
 }
 
+func (m *addDownloadView) handleEvent(msg events.Event) (types.View, tea.Cmd) {
+	var cmd tea.Cmd
+	listInputM := m.inputs[queueName].(*listinput.Model)
+	switch msg.EventType {
+	case events.QueueCreated:
+		cmd = listInputM.InsertItem(len(listInputM.Items()),
+			queueToAddDownloadQueueItem(msg.Payload.(state.Queue)))
+	case events.QueueEdited:
+		queue := msg.Payload.(state.Queue)
+		idx, found := listInputM.FindItemIdx(strconv.Itoa(int(queue.ID)))
+		if found {
+			cmd = listInputM.SetItem(idx, queueToAddDownloadQueueItem(queue))
+		} else {
+			slog.Warn("queue edited but was not in add download list", "queue_id", queue.ID)
+			cmd = listInputM.InsertItem(len(listInputM.Items()),
+				queueToAddDownloadQueueItem(msg.Payload.(state.Queue)))
+		}
+	case events.QueueDeleted:
+		queueID := msg.Payload.(int64)
+		idx, found := listInputM.FindItemIdx(strconv.Itoa(int(queueID)))
+		if found {
+			listInputM.RemoveItem(idx)
+		} else {
+			slog.Warn("queue was deleted and not found in add download queue list", "queue_id", queueID)
+		}
+
+	}
+	return m, cmd
+}
+
 func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	cmds := make([]tea.Cmd, len(m.inputs))
 
 	switch msg := msg.(type) {
+	case events.Event:
+		return m.handleEvent(msg)
+	case addDownloadFormError:
+		m.err = msg.error
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
@@ -130,8 +205,8 @@ func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 				}
 
 				m.err = nil
-				return m, addDownloadCmd(m.inputs[url].Value(),
-					m.inputs[queueName].Value(), m.inputs[fileName].Value())
+				return m, m.addDownloadCmd(m.inputs[url].Value(),
+					m.inputs[fileName].Value(), m.inputs[queueName].Value())
 			}
 			m.nextInput()
 		case tea.KeyCtrlC, tea.KeyEsc:
@@ -213,4 +288,8 @@ func (m *addDownloadView) prevInput() {
 	if m.focused < 0 {
 		m.focused = len(m.inputs) - 1
 	}
+}
+
+func queueToAddDownloadQueueItem(queue state.Queue) list.Item {
+	return listinput.NewItem(strconv.Itoa(int(queue.ID)), queue.Name, queue.Directory)
 }

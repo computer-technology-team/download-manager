@@ -2,7 +2,7 @@ package events
 
 type EventType int
 
-const(
+const (
 	chanSize = 100
 
 	DownloadFailed EventType = iota
@@ -17,14 +17,22 @@ const(
 
 type Event struct {
 	EventType EventType
-	Payload interface{}
+	Payload   interface{}
 }
 
-var eventChannel chan Event
+var eventChannel, uiEventChannel chan Event
 
-func GetChannel() chan Event {
+func GetEventChannel() chan Event {
 	if eventChannel == nil {
 		eventChannel = make(chan Event, chanSize)
 	}
 	return eventChannel
+}
+
+// UI socket
+func GetUIEventChannel() chan Event {
+	if uiEventChannel == nil {
+		uiEventChannel = make(chan Event, chanSize)
+	}
+	return uiEventChannel
 }

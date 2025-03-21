@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/samber/lo"
 
 	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
@@ -87,11 +88,9 @@ func NewDownloadsList(ctx context.Context, queueManager queues.QueueManager) (ty
 		return nil, err
 	}
 
-	rows := []table.Row{
-		{"url1", "queue1", "progress1"},
-		{"url2", "queue2", "progress2"},
-		{"url3", "queue3", "progress3"},
-	}
+	rows := lo.Map(downloads, func(d state.ListDownloadsWithQueueNameRow, _ int) table.Row {
+		return downloadToDownloadTableRow(d)
+	})
 
 	t := table.New(
 		table.WithRows(rows),
@@ -106,4 +105,8 @@ func NewDownloadsList(ctx context.Context, queueManager queues.QueueManager) (ty
 
 		downloads: downloads,
 	}, nil
+}
+
+func downloadToDownloadTableRow(download state.ListDownloadsWithQueueNameRow) table.Row {
+	return table.Row{download.Url, download.QueueName, download.State}
 }

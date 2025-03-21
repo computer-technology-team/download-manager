@@ -3,12 +3,14 @@ module github.com/computer-technology-team/download-manager.git
 go 1.23.3
 
 require (
+	github.com/Code-Hex/Neo-cowsay/v2 v2.0.4
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
 	modernc.org/sqlite v1.18.1
 )
 
 require (
+	github.com/Code-Hex/go-wordwrap v1.0.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect

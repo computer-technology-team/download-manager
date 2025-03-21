@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
@@ -106,11 +107,11 @@ func New() *Model {
 	}
 }
 
-func (m *Model) Value() types.TimeValue {
+func (m *Model) Value() state.TimeValue {
 	hour, _ := strconv.Atoi(m.hourInput.Value())
 	minute, _ := strconv.Atoi(m.minuteInput.Value())
 	second, _ := strconv.Atoi(m.secondInput.Value())
-	return types.TimeValue{Hour: hour, Minute: minute, Second: second}
+	return state.TimeValue{Hour: hour, Minute: minute, Second: second}
 }
 
 func (m *Model) Focus() tea.Cmd {
@@ -134,7 +135,7 @@ func (m *Model) validate() {
 	m.err = errors.Join(m.hourInput.Err, m.minuteInput.Err, m.secondInput.Err)
 }
 
-func (m *Model) Update(msg tea.Msg) (types.Input[types.TimeValue], tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (types.Input[state.TimeValue], tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -217,7 +218,7 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m *Model) SetValue(val types.TimeValue) error {
+func (m *Model) SetValue(val state.TimeValue) error {
 	if err := val.Validate(); err != nil {
 		return err
 	}

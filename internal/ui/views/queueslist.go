@@ -2,18 +2,23 @@ package views
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/samber/lo"
 
+	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/queues"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
 type queueListViewMode string
+
+type backToTable struct{}
 
 const (
 	tableMode      queueListViewMode = "table"
@@ -56,6 +61,10 @@ func DefaultQueueListKeyMap() queueListKeyMap {
 			key.WithHelp("esc", "back to list"),
 		),
 	}
+}
+
+func backToTableCmd() tea.Msg {
+	return backToTable{}
 }
 
 type queuesListView struct {
@@ -126,7 +135,7 @@ func (m queuesListView) Init() tea.Cmd { return nil }
 func (m *queuesListView) switchToCreateFormMode() tea.Cmd {
 	m.mode = createFormMode
 	if m.queueCreateForm == nil {
-		m.queueCreateForm = NewQueueCreateForm(m.queueManager)
+		m.queueCreateForm = NewQueueCreateForm(m.queueManager, backToTableCmd)
 		return m.queueCreateForm.Init()
 	}
 
@@ -137,7 +146,7 @@ func (m *queuesListView) switchToEditFormMode() tea.Cmd {
 	m.mode = editFormMode
 	if m.queueEditForm == nil {
 		var err error
-		m.queueEditForm, err = NewQueueEditForm(state.Queue{}, m.queueManager)
+		m.queueEditForm, err = NewQueueEditForm(state.Queue{}, m.queueManager, backToTableCmd)
 		if err != nil {
 			slog.Error("could not render edit form", "error", err)
 			m.mode = tableMode
@@ -153,10 +162,44 @@ func (m *queuesListView) switchToTableMode() {
 	m.mode = tableMode
 }
 
+func (m *queuesListView) handleEvent(msg events.Event) {
+	switch msg.EventType {
+	case events.QueueCreated:
+		m.queues = append(m.queues, msg.Payload.(state.Queue))
+	case events.QueueDeleted:
+		deletedQueueID := msg.Payload.(int64)
+		m.queues = lo.Filter(m.queues, func(queue state.Queue, _ int) bool {
+			return deletedQueueID != queue.ID
+		})
+
+	case events.QueueEdited:
+		queue := msg.Payload.(state.Queue)
+		_, queueIdx, found := lo.FindIndexOf(m.queues, func(queueI state.Queue) bool {
+			return queueI.ID == queue.ID
+		})
+		if !found {
+			slog.Warn("queue was not found but update requested", "queue_id", queue.ID)
+		}
+
+		m.queues[queueIdx] = queue
+	default:
+		return
+	}
+
+	m.tableModel.SetRows(lo.Map(m.queues, func(queue state.Queue, _ int) table.Row {
+		return queueToQueueTableRow(queue)
+	}))
+}
+
 func (m queuesListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case events.Event:
+		m.handleEvent(msg)
+	case backToTable:
+		m.switchToTableMode()
+		return m, nil
 	case tea.KeyMsg:
 		switch m.mode {
 		case tableMode:
@@ -221,7 +264,12 @@ func NewQueuesList(ctx context.Context, queueManager queues.QueueManager) (types
 		return nil, err
 	}
 
+	rows := lo.Map(queues, func(queue state.Queue, _ int) table.Row {
+		return queueToQueueTableRow(queue)
+	})
+
 	t := table.New(
+		table.WithRows(rows),
 		table.WithColumns(queuesColumns),
 		table.WithFocused(true),
 		table.WithStyles(tableStyles),
@@ -236,4 +284,22 @@ func NewQueuesList(ctx context.Context, queueManager queues.QueueManager) (types
 
 		queueManager: queueManager,
 	}, nil
+}
+
+func queueToQueueTableRow(queue state.Queue) table.Row {
+	var bandwidthLimit, startEndTime string
+
+	if queue.MaxBandwidth.Valid {
+		bandwidthLimit = FormatBytesPerSecond(queue.MaxBandwidth.Int64)
+	} else {
+		bandwidthLimit = "No Limit"
+	}
+
+	if queue.ScheduleMode {
+		startEndTime = fmt.Sprintf("%s - %s", queue.StartDownload, queue.EndDownload)
+	} else {
+		startEndTime = "No Schedule"
+	}
+
+	return table.Row{queue.Name, bandwidthLimit, queue.Directory, "", startEndTime}
 }
