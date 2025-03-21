@@ -18,7 +18,7 @@ func (g generalErrorModel) View() string {
 	say, err := cowsay.Say(
 		g.err.Error(),
 		cowsay.BallonWidth(40),
-		cowsay.Type("www"))
+		cowsay.Type("www"), cowsay.Eyes("XX"))
 
 	if err != nil {
 		slog.Error("could not render error cowsay", "error", err)

@@ -11,13 +11,6 @@ import (
 
 func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, limiter *bandwidthlimit.Limiter) (DownloadHandler, error) {
 
-	savePath := downloadConfig.SavePath
-
-	if _, err := os.Stat(savePath); err == nil {
-		return nil, fmt.Errorf("file already exists at %s", savePath)
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("error checking file at %s: %w", savePath, err)
-	}
 	pausedChan := make(chan int, 1)
 
 	defDow := defaultDownloader{
@@ -54,6 +47,15 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 	} else if len(downloadChuncks) == 1 && downloadChuncks[0].SinglePart {
 		defDow.chunkHandlers = []*DownloadChunkHandler{
 			NewDownloadChunkHandler(downloadChuncks[0], defDow.pausedChan, defDow.failedChannel, &defDow.wg),
+		}
+	} else {
+
+		savePath := downloadConfig.SavePath
+
+		if _, err := os.Stat(savePath); err == nil {
+			return nil, fmt.Errorf("file already exists at %s", savePath)
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("error checking file at %s: %w", savePath, err)
 		}
 	}
 
