@@ -2,6 +2,7 @@ package queues
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -43,7 +44,7 @@ func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID 
 		}
 	}
 	q.mu.RUnlock()
-  
+
 	queue, err := q.queries.GetQueue(ctx, queueID)
 	if err != nil {
 		slog.Error("failed to get queue details", "queueID", queueID, "error", err)
@@ -74,7 +75,6 @@ func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID 
 	return nil
 }
 
-
 func (q *queueManager) startNextDownloadIfPossibleByDownloadID(ctx context.Context, downloadID int64) error {
 
 	download, err := q.queries.GetDownload(ctx, downloadID)
@@ -82,7 +82,6 @@ func (q *queueManager) startNextDownloadIfPossibleByDownloadID(ctx context.Conte
 		slog.Error("failed to get download details", "downloadID", downloadID, "error", err)
 		return fmt.Errorf("failed to get download details: %w", err)
 	}
-
 
 	queueID := download.QueueID
 
@@ -129,7 +128,6 @@ func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
 		slog.Error("failed to get queue details", "queueID", download.QueueID, "error", err)
 		return fmt.Errorf("failed to get queue details: %w", err)
 	}
-
 
 	if download.Retries < queue.RetryLimit {
 		if _, err := q.queries.SetDownloadRetry(ctx, state.SetDownloadRetryParams{
