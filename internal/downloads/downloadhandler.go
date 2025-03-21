@@ -5,7 +5,7 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
-func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, ticker bandwidthlimit.Ticker) DownloadHandler {
+func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, limiter *bandwidthlimit.Limiter) DownloadHandler {
 	pausedChan := make(chan int, 1)
 	close(pausedChan)
 
@@ -15,7 +15,7 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		url:           downloadConfig.Url,
 		savePath:      downloadConfig.SavePath,
 		state:         DownloadState(downloadConfig.State),
-		ticker:        ticker,
+		limiter:       limiter,
 		chunkHandlers: nil,
 		progress:      0,
 		progressRate:  0,

@@ -28,7 +28,7 @@ type defaultDownloader struct {
 	url           string
 	savePath      string
 	state         DownloadState
-	ticker        bandwidthlimit.Ticker
+	limiter       *bandwidthlimit.Limiter
 	chunkHandlers []*DownloadChunkHandler
 	progress      int64
 	progressRate  float64
@@ -36,11 +36,7 @@ type defaultDownloader struct {
 	pausedChan    *chan int
 	ctx           context.Context
 	ctxCancel     context.CancelFunc
-	writer        SynchronizedFileWriter
-}
-
-func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
-	return &d.ticker
+	writer        *SynchronizedFileWriter
 }
 
 func (d *defaultDownloader) keepTrackOfProgress() {
@@ -121,10 +117,8 @@ func (d *defaultDownloader) Start() error {
 	}
 
 	for _, handler := range d.chunkHandlers {
-		handler.Start(d.url, &d.ticker, d.writer)
+		handler.Start(d.url, d.limiter, d.writer)
 	}
-
-	d.ticker.Start()
 
 	d.reportProgress()
 	go d.keepTrackOfProgress()
@@ -185,8 +179,6 @@ func (d *defaultDownloader) Cancel() error {
 			return err
 		}
 	}
-
-	d.GetTicker().Stop()
 
 	return nil
 }

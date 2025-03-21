@@ -10,21 +10,22 @@ type SynchronizedFileWriter struct {
 	file  *os.File
 }
 
-func NewSynchronizedFileWriter(filePath string) SynchronizedFileWriter {
+func NewSynchronizedFileWriter(filePath string) *SynchronizedFileWriter {
 	var file, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		panic("failed to open file") // TODO
 	}
-	return SynchronizedFileWriter{
+	return &SynchronizedFileWriter{
 		mutex: &sync.Mutex{},
 		file:  file,
 	}
 }
 
-func (writer *SynchronizedFileWriter) Write(buffer []byte, at int64, length int64) {
+func (writer *SynchronizedFileWriter) WriteAt(buffer []byte, at int64) (int, error) {
 	writer.mutex.Lock()
-	writer.file.WriteAt(buffer[:length], at)
+	n, err := writer.file.WriteAt(buffer, at)
 	writer.mutex.Unlock()
+	return n, err
 }
 
 func (writer *SynchronizedFileWriter) Close() {

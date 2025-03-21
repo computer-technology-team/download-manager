@@ -2,6 +2,7 @@ package downloads
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -34,11 +35,11 @@ func NewDownloadChunkHandler(cfg state.DownloadChunk, pausedChan *chan int) Down
 	return downChunk
 }
 
-func (chunkHandler *DownloadChunkHandler) Start(url string, sharedTicker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter) {
-	go chunkHandler.start(url, sharedTicker, syncWriter)
+func (chunkHandler *DownloadChunkHandler) Start(url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
+	go chunkHandler.start(url, limiter, syncWriter)
 }
 
-func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlimit.Ticker, syncWriter SynchronizedFileWriter) {
+func (chunkHandler *DownloadChunkHandler) start(url string, limiter *bandwidthlimit.Limiter, syncWriter *SynchronizedFileWriter) {
 
 	conn, err := getConn(url) // connect to the proper host with the correct protocol
 	if err != nil {
@@ -46,22 +47,19 @@ func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlim
 		//TODO handle error
 	}
 
-	reader := sendRequest(url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd) // send get request
-	buffer := make([]byte, bandwidthlimit.MaxpacketSize)
-	for {
+	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer+chunkHandler.rangeStart)
 
+	reader := bandwidthlimit.NewLimitedReader(context.Background(),
+		sendRequest(url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd), limiter)
+	for {
 		<-*chunkHandler.pausedChan
 
-		ticker.GetToken()
-		// fmt.Println(chunkHandler.rangeStart)
-		n, err := reader.Read(buffer)
-		if err != nil && err != io.EOF {
+		n, err := io.Copy(writer, reader)
+
+		if err != nil {
 			fmt.Println("Error reading:", err) //TODO
 			return
 		}
-		n = int(min(int64(n), chunkHandler.rangeEnd-chunkHandler.currentPointer))
-
-		syncWriter.Write(buffer, chunkHandler.currentPointer, int64(n))
 
 		chunkHandler.currentPointer += int64(n)
 
@@ -71,7 +69,7 @@ func (chunkHandler *DownloadChunkHandler) start(url string, ticker *bandwidthlim
 	}
 }
 
-func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) io.Reader { // send get and skip header
+func sendRequest(requestURL string, conn net.Conn, rangeStart, rangeEnd int64) io.ReadCloser { // send get and skip header
 	parsedURL, _ := url.Parse(requestURL)
 
 	request := fmt.Sprintf("GET %s HTTP/1.1\r\n"+
