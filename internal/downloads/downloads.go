@@ -57,23 +57,21 @@ func (d *defaultDownloader) keepTrackOfProgress() {
 }
 
 func (d *defaultDownloader) reportProgress() {
-	if d.state == StateInProgress {
-		currentProgress := d.getTotalProgress()
-		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
-		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
-		d.progress = currentProgress
-		if d.progress == d.size {
-			d.state = StateCompleted
-			events.GetEventChannel() <- events.Event{
-				EventType: events.DownloadCompleted,
-				Payload:   d.status(),
-			}
-			d.ctxCancel()
-		} else {
-			events.GetEventChannel() <- events.Event{
-				EventType: events.DownloadProgressed,
-				Payload:   d.status(),
-			}
+	currentProgress := d.getTotalProgress()
+	newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
+	d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
+	d.progress = currentProgress
+	if d.progress == d.size {
+		d.state = StateCompleted
+		events.GetEventChannel() <- events.Event{
+			EventType: events.DownloadCompleted,
+			Payload:   d.status(),
+		}
+		d.ctxCancel()
+	} else {
+		events.GetEventChannel() <- events.Event{
+			EventType: events.DownloadProgressed,
+			Payload:   d.status(),
 		}
 	}
 
@@ -88,7 +86,6 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 }
 
 func (d *defaultDownloader) Start() error {
-	d.state = StateInProgress
 	d.ctx, d.ctxCancel = context.WithCancel(context.Background())
 
 	req, err := http.NewRequest("HEAD", d.url, nil)

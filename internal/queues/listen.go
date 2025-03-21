@@ -19,7 +19,7 @@ func Listen(q QueueManager, ctx context.Context) {
 		case events.DownloadProgressed:
 			q.UpsertChunks(ctx, event.Payload.(downloads.DownloadStatus))
 		case events.DownloadCompleted:
-			id := event.Payload.(events.DownloadFailedEvent).ID
+			id := event.Payload.(downloads.DownloadStatus).ID
 			q.DownloadCompleted(ctx, id)
 		default:
 			slog.Error("Unknown Event type", "eventType", event.EventType)

@@ -2,6 +2,7 @@ package queues
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -63,6 +64,9 @@ func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID 
 	// Get the next pending download for the queue
 	nextDownload, err := q.queries.GetPendingDownloadByQueueID(ctx, queueID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		slog.Error("failed to get pending download by queue ID", "queueID", queueID, "error", err)
 		return err
 	}

@@ -278,5 +278,6 @@ func defaultDownloadsListKeyMap() downloadsListKeyMap {
 		Resume: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "resume download")),
 		Pause:  key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pause download")),
 		Retry:  key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "retry download")),
+		Delete: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete downloak")),
 	}
 }

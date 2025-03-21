@@ -72,9 +72,9 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 			return
 		default:
 			n, err := io.CopyN(writer, reader, 1<<14)
+			chunkHandler.currentPointer += int64(n)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					chunkHandler.currentPointer += int64(n)
 					break
 				}
 
@@ -87,7 +87,6 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 				return
 			}
 
-			chunkHandler.currentPointer += int64(n)
 			if chunkHandler.currentPointer >= chunkHandler.rangeEnd {
 				return
 			}

@@ -2,6 +2,7 @@ package queues
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -22,6 +23,11 @@ func (q *queueManager) PauseDownload(ctx context.Context, id int64) error {
 	if err != nil {
 		slog.Error("failed to get download details", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to get download details: %w", err)
+	}
+
+	if currentDownload.State != string(downloads.StateInProgress) {
+		slog.Error("invalid state", "current_download_state", currentDownload.State)
+		return errors.New("can not pause download that is not in progress")
 	}
 
 	q.mu.Lock()
@@ -140,6 +146,8 @@ func (q *queueManager) CreateDownload(ctx context.Context, downloadURL, fileName
 		Retries:  0,
 	}
 
+	createDownloadParams.State = string(downloads.StateInProgress)
+
 	download, err := q.queries.CreateDownload(ctx, createDownloadParams)
 	if err != nil {
 		slog.Error("failed to create download", "params", createDownloadParams, "error", err)
@@ -173,13 +181,11 @@ func (q *queueManager) DeleteDownload(ctx context.Context, id int64) error {
 	handler, ok := q.inProgressHandlers[id]
 	q.mu.RUnlock()
 
-	if !ok {
-		return fmt.Errorf("download handler not found for ID %d", id)
-	}
-
-	if err := handler.Pause(); err != nil {
-		slog.Error("failed to pause download handler", "downloadID", id, "error", err)
-		return fmt.Errorf("failed to pause download handler: %w", err)
+	if ok {
+		if err := handler.Pause(); err != nil {
+			slog.Error("failed to pause download handler", "downloadID", id, "error", err)
+			return fmt.Errorf("failed to pause download handler: %w", err)
+		}
 	}
 
 	currentDownload, err := q.queries.GetDownload(ctx, id)
@@ -194,15 +200,17 @@ func (q *queueManager) DeleteDownload(ctx context.Context, id int64) error {
 		return fmt.Errorf("failed to delete download: %w", err)
 	}
 
-	q.mu.Lock()
-	delete(q.inProgressHandlers, id)
-	q.mu.Unlock()
+	if ok {
+		q.mu.Lock()
+		delete(q.inProgressHandlers, id)
+		q.mu.Unlock()
+
+		if err := q.startNextDownloadIfPossible(ctx, queueID); err != nil {
+			return err
+		}
+	}
 
 	slog.Info("download deleted successfully", "downloadID", id)
-
-	if err := q.startNextDownloadIfPossible(ctx, queueID); err != nil {
-		return err
-	}
 
 	return nil
 }
