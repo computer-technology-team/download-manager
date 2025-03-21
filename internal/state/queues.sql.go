@@ -124,7 +124,8 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 
 const updateQueue = `-- name: UpdateQueue :one
 UPDATE queues
-SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?, retry_limit = ?, max_concurrent = ?, schedule_mode = ?, directory = ?
+SET name = ?, max_bandwidth = ?, start_download = ?, end_download = ?,
+retry_limit = ?, max_concurrent = ?, schedule_mode = ?, directory = ?
 WHERE id = ?
 RETURNING id, name, directory, max_bandwidth, start_download, end_download, retry_limit, schedule_mode, max_concurrent
 `

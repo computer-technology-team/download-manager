@@ -23,6 +23,7 @@ type DownloadChunk struct {
 	RangeEnd       int64
 	CurrentPointer int64
 	DownloadID     int64
+	SinglePart     bool
 }
 
 type Queue struct {

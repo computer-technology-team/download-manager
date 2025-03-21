@@ -32,8 +32,8 @@ DELETE FROM downloads
 WHERE id = ?;
 
 -- name: UpsertDownloadChunk :one
-INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id, single_part)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE
 SET current_pointer = EXCLUDED.current_pointer
 RETURNING *;

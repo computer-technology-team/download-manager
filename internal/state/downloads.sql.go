@@ -83,7 +83,7 @@ func (q *Queries) GetDownload(ctx context.Context, id int64) (Download, error) {
 }
 
 const getDownloadChunk = `-- name: GetDownloadChunk :one
-SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
+SELECT id, range_start, range_end, current_pointer, download_id, single_part FROM download_chunks
 WHERE id = ?
 `
 
@@ -96,12 +96,13 @@ func (q *Queries) GetDownloadChunk(ctx context.Context, id string) (DownloadChun
 		&i.RangeEnd,
 		&i.CurrentPointer,
 		&i.DownloadID,
+		&i.SinglePart,
 	)
 	return i, err
 }
 
 const getDownloadChunksByDownloadID = `-- name: GetDownloadChunksByDownloadID :many
-SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
+SELECT id, range_start, range_end, current_pointer, download_id, single_part FROM download_chunks
 WHERE download_id = ?
 `
 
@@ -120,6 +121,7 @@ func (q *Queries) GetDownloadChunksByDownloadID(ctx context.Context, downloadID 
 			&i.RangeEnd,
 			&i.CurrentPointer,
 			&i.DownloadID,
+			&i.SinglePart,
 		); err != nil {
 			return nil, err
 		}
@@ -155,7 +157,7 @@ func (q *Queries) GetPendingDownloadByQueueID(ctx context.Context, queueID int64
 }
 
 const listDownloadChunks = `-- name: ListDownloadChunks :many
-SELECT id, range_start, range_end, current_pointer, download_id FROM download_chunks
+SELECT id, range_start, range_end, current_pointer, download_id, single_part FROM download_chunks
 `
 
 func (q *Queries) ListDownloadChunks(ctx context.Context) ([]DownloadChunk, error) {
@@ -173,6 +175,7 @@ func (q *Queries) ListDownloadChunks(ctx context.Context) ([]DownloadChunk, erro
 			&i.RangeEnd,
 			&i.CurrentPointer,
 			&i.DownloadID,
+			&i.SinglePart,
 		); err != nil {
 			return nil, err
 		}
@@ -321,11 +324,11 @@ func (q *Queries) SetDownloadState(ctx context.Context, arg SetDownloadStatePara
 }
 
 const upsertDownloadChunk = `-- name: UpsertDownloadChunk :one
-INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO download_chunks (id, range_start, range_end, current_pointer, download_id, single_part)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE
 SET current_pointer = EXCLUDED.current_pointer
-RETURNING id, range_start, range_end, current_pointer, download_id
+RETURNING id, range_start, range_end, current_pointer, download_id, single_part
 `
 
 type UpsertDownloadChunkParams struct {
@@ -334,6 +337,7 @@ type UpsertDownloadChunkParams struct {
 	RangeEnd       int64
 	CurrentPointer int64
 	DownloadID     int64
+	SinglePart     bool
 }
 
 func (q *Queries) UpsertDownloadChunk(ctx context.Context, arg UpsertDownloadChunkParams) (DownloadChunk, error) {
@@ -343,6 +347,7 @@ func (q *Queries) UpsertDownloadChunk(ctx context.Context, arg UpsertDownloadChu
 		arg.RangeEnd,
 		arg.CurrentPointer,
 		arg.DownloadID,
+		arg.SinglePart,
 	)
 	var i DownloadChunk
 	err := row.Scan(
@@ -351,6 +356,7 @@ func (q *Queries) UpsertDownloadChunk(ctx context.Context, arg UpsertDownloadChu
 		&i.RangeEnd,
 		&i.CurrentPointer,
 		&i.DownloadID,
+		&i.SinglePart,
 	)
 	return i, err
 }

@@ -15,6 +15,7 @@ CREATE TABLE download_chunks (
     range_end INTEGER NOT NULL,
     current_pointer INTEGER NOT NULL,
     download_id INTEGER NOT NULL,
+    single_part BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (download_id) REFERENCES downloads(id) ON DELETE CASCADE
 );

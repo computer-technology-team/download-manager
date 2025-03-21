@@ -2,16 +2,17 @@ package downloads
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samber/lo"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
@@ -38,6 +39,8 @@ type defaultDownloader struct {
 	ctx           context.Context
 	ctxCancel     context.CancelFunc
 	writer        *SynchronizedFileWriter
+	wg            sync.WaitGroup
+	failedChannel chan interface{}
 }
 
 func (d *defaultDownloader) keepTrackOfProgress() {
@@ -59,12 +62,21 @@ func (d *defaultDownloader) reportProgress() {
 		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
 		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
 		d.progress = currentProgress
+		if d.progress == d.size {
+			d.state = StateCompleted
+			events.GetEventChannel() <- events.Event{
+				EventType: events.DownloadCompleted,
+				Payload:   d.status(),
+			}
+			d.ctxCancel()
+		} else {
+			events.GetEventChannel() <- events.Event{
+				EventType: events.DownloadProgressed,
+				Payload:   d.status(),
+			}
+		}
 	}
 
-	events.GetEventChannel() <- events.Event{
-		EventType: events.DownloadProgressed,
-		Payload:   d.status(),
-	}
 }
 
 func (d *defaultDownloader) getTotalProgress() int64 {
@@ -76,10 +88,6 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 }
 
 func (d *defaultDownloader) Start() error {
-	if d.state == StatePaused {
-		close(*d.pausedChan)
-	}
-
 	d.state = StateInProgress
 	d.ctx, d.ctxCancel = context.WithCancel(context.Background())
 
@@ -94,16 +102,28 @@ func (d *defaultDownloader) Start() error {
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		fmt.Println("Error in requesting header: ", err)
-		// TODO log.Fatal(err)
+		return fmt.Errorf("could not get headers from url %s: %w", d.url, err)
 	}
 
-	d.url = resp.Request.URL.String()
-
 	d.writer = NewSynchronizedFileWriter(d.savePath)
-	segmentsList := d.getChunkSegments(resp.Header)
 
-	if len(d.chunkHandlers) != numberOfChuncks {
+	d.size, err = getContentSize(resp.Header)
+	if err != nil {
+		slog.Error("could not get content size", "error", err)
+		return fmt.Errorf("could not get content size from url %s: %w", d.url, err)
+	}
+
+	var segmentsList [][]int64
+	var acceptsRanges bool
+
+	if doesAccpetRanges(resp) {
+		acceptsRanges = true
+		segmentsList = d.getChunkSegments()
+	} else {
+		segmentsList = [][]int64{{0, d.size}}
+	}
+
+	if d.chunkHandlers == nil {
 		chunkhandlersList := make([]*DownloadChunkHandler, 0)
 
 		for _, segment := range segmentsList {
@@ -115,9 +135,10 @@ func (d *defaultDownloader) Start() error {
 				RangeEnd:       r,
 				CurrentPointer: l,
 				DownloadID:     d.id,
-			}, d.pausedChan)
+				SinglePart:     !acceptsRanges,
+			}, d.pausedChan, d.failedChannel, &d.wg)
 
-			chunkhandlersList = append(chunkhandlersList, &handler)
+			chunkhandlersList = append(chunkhandlersList, handler)
 		}
 
 		d.chunkHandlers = chunkhandlersList
@@ -129,34 +150,30 @@ func (d *defaultDownloader) Start() error {
 
 	d.reportProgress()
 	go d.keepTrackOfProgress()
+	go d.listenForFailiure()
 	return nil
 }
 
-func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
-	//TODO this is a prototype
+func (d *defaultDownloader) getChunkSegments() [][]int64 {
 
-	size, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
-	d.size = size
-	if err != nil {
-		fmt.Println("no content length header", err) // TODO
-	}
-
-	if header.Get("Accept-Ranges") != "bytes" {
-		fmt.Println("server does not accept range requests") // TODO need an if on test mode
-		return [][]int64{{0, int64(size)}}
-	}
-
-	chunkSize := int64(math.Ceil(float64(size) / numberOfChuncks))
+	chunkSize := int64(math.Ceil(float64(d.size) / numberOfChuncks))
 
 	segmentsList := make([][]int64, 0)
 
 	var i int64
-	for ; chunkSize*i < size; i++ {
-		segmentsList = append(segmentsList, []int64{i * chunkSize, min((i+1)*chunkSize, size)})
+	for ; chunkSize*i < d.size; i++ {
+		segmentsList = append(segmentsList, []int64{i * chunkSize, min((i+1)*chunkSize, d.size)})
 	}
-	fmt.Println(len(segmentsList))
 
 	return segmentsList
+}
+
+func getContentSize(header http.Header) (int64, error) {
+	contentLength := header.Get("Content-Length")
+	if contentLength == "" {
+		return 0, errors.New("response does not have Content-Length")
+	}
+	return strconv.ParseInt(contentLength, 10, 64)
 }
 
 func (d *defaultDownloader) Pause() error {
@@ -164,27 +181,27 @@ func (d *defaultDownloader) Pause() error {
 		if d.ctxCancel != nil {
 			d.ctxCancel()
 		}
+		close(*d.pausedChan)
 
-		d.pausedChan = lo.ToPtr(make(chan int))
-		d.state = StatePaused
+		d.wg.Wait()
 		d.writer.Close()
 	}
 	return nil
 }
 
 func (d *defaultDownloader) Cancel() error {
-	d.Pause()
+	err := d.Pause()
+	if err != nil {
+		return fmt.Errorf("could not pause download: %w", err)
+	}
 
 	if d.ctxCancel != nil {
 		d.ctxCancel()
 	}
 
-	path, _ := filepath.Abs(d.savePath)
-
-	if path != "" {
-		if err := os.Remove(path); err != nil {
-			fmt.Println("couldn't delete")
-			return err
+	if d.savePath != "" {
+		if err := os.Remove(d.savePath); err != nil {
+			return fmt.Errorf("could not delete file: %w", err)
 		}
 	}
 
@@ -216,4 +233,29 @@ func (d *defaultDownloader) status() DownloadStatus {
 	status.DownloadChuncks = chunkList
 
 	return status
+}
+
+func (d *defaultDownloader) listenForFailiure() {
+	select {
+	case <-d.failedChannel:
+		err := d.Pause()
+		if err != nil {
+			events.GetEventChannel() <- events.Event{
+				EventType: events.DownloadFailed,
+				Payload:   events.DownloadFailedEvent{Error: err},
+			}
+		}
+		return
+	case <-d.ctx.Done():
+		return
+	}
+
+}
+
+func doesAccpetRanges(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+
+	return resp.Header.Get("Accept-Ranges") == "bytes"
 }
