@@ -31,6 +31,8 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 
+			go queues.Listen(queueManager, ctx)
+
 			teaProgram, err := ui.NewDownloadManagerProgram(ctx, queueManager)
 			if err != nil {
 				return err
