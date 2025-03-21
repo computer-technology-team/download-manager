@@ -35,9 +35,9 @@ func (t *Ticker) generate() {
 	for {
 		select {
 		case <-t.generationQuiteChan:
+			fmt.Println("stoppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
 			return
 		default:
-			fmt.Println("ticker delay: ", t.tickerDelay)
 			t.tokens <- 0
 			time.Sleep(time.Second * time.Duration(t.tickerDelay))
 		}
