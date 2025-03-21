@@ -1,5 +1,7 @@
-```markdown
+
 # Download Manager
+
+Repo: [github.com/computer-technology-team/download-manager](https://github.com/computer-technology-team/download-manager)
 
 A powerful, terminal-based download manager written in Go, featuring multi-part downloads, bandwidth limiting, and an interactive TUI.
 
@@ -100,4 +102,3 @@ An event-driven architecture allows components to communicate without tight coup
 - **Concurrency**: Go routines and channels
 - **File I/O**: Synchronized file access for concurrent chunk writing
 - **HTTP Client**: Custom-configured HTTP client with timeout settings
-```
