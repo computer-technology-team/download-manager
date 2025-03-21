@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
-	"github.com/google/uuid"
 )
 
 const progressUpdatePeriod int = 1
@@ -63,7 +64,7 @@ func (d *defaultDownloader) reportProgress() {
 		d.progress = currentProgress
 	}
 
-	events.GetChannel() <- events.Event{
+	events.GetEventChannel() <- events.Event{
 		EventType: events.DownloadProgressed,
 		Payload:   d.status(),
 	}
