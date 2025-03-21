@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"path"
+	"sync"
 
+	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/downloads"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
@@ -36,19 +39,81 @@ type QueueManager interface {
 type queueManager struct {
 	queries            *state.Queries
 	inProgressHandlers map[int64]downloads.DownloadHandler
+	queueLimiters      map[int64]*bandwidthlimit.Limiter
+	mu                 sync.RWMutex // Mutex to protect inProgressHandlers
 }
 
-// CreateDownload implements QueueManager.
-func (q queueManager) CreateDownload(ctx context.Context, downloadURL, fileName string, queueID int64) error {
+// Helper function to set download state
+func (q *queueManager) setDownloadState(ctx context.Context, id int64, downloadState string) error {
+	_, err := q.queries.SetDownloadState(ctx, state.SetDownloadStateParams{State: downloadState, ID: id})
+	if err != nil {
+		slog.Error("failed to set download state", "state", downloadState, "downloadID", id, "error", err)
+		return err
+	}
+	return nil
+}
+
+// Helper function to start the next download of a queue if it has capacity
+func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID int64) error {
+	var activeDownloads int64 = 0
+
+	// Count the number of active downloads for the given queueID
+	q.mu.RLock()
+	for id := range q.inProgressHandlers {
+		download, err := q.queries.GetDownload(ctx, id)
+		if err != nil {
+			q.mu.RUnlock()
+			slog.Error("failed to get download details", "downloadID", id, "error", err)
+			return fmt.Errorf("failed to get download details: %w", err)
+		}
+		if download.QueueID == queueID {
+			activeDownloads++
+		}
+	}
+	q.mu.RUnlock()
+
+	// Get the queue's MaxConcurrent limit from the database
+	queue, err := q.queries.GetQueue(ctx, queueID)
+	if err != nil {
+		slog.Error("failed to get queue details", "queueID", queueID, "error", err)
+		return fmt.Errorf("failed to get queue details: %w", err)
+	}
+
+	// If the queue is full, do nothing and return nil
+	if activeDownloads >= queue.MaxConcurrent {
+		slog.Info("queue is full, cannot start next download", "queueID", queueID, "activeDownloads", activeDownloads, "maxConcurrent", queue.MaxConcurrent)
+		return nil
+	}
+
+	// Get the next pending download for the queue
+	nextDownload, err := q.queries.GetPendingDownloadByQueueID(ctx, queueID)
+	if err != nil {
+		slog.Error("failed to get pending download by queue ID", "queueID", queueID, "error", err)
+		return err
+	}
+
+	// Resume the next download using the existing ResumeDownload method
+	if err := q.ResumeDownload(ctx, nextDownload.ID); err != nil {
+		slog.Error("failed to resume download", "downloadID", nextDownload.ID, "error", err)
+		return fmt.Errorf("failed to resume download: %w", err)
+	}
+
+	slog.Info("started next download", "downloadID", nextDownload.ID)
+	return nil
+}
+
+func (q *queueManager) CreateDownload(ctx context.Context, downloadURL, fileName string, queueID int64) error {
 	parsedURL, err := url.Parse(downloadURL)
 	if err != nil {
-		return err
+		slog.Error("failed to parse download URL", "url", downloadURL, "error", err)
+		return fmt.Errorf("failed to parse download URL: %w", err)
 	}
 
 	if fileName == "" {
 		lastPathSegment := path.Base(parsedURL.Path)
 
 		if lastPathSegment == "" || lastPathSegment == "." || lastPathSegment == "/" {
+			slog.Error("empty file name in URL", "url", downloadURL)
 			return ErrEmptyFileName
 		}
 
@@ -57,20 +122,22 @@ func (q queueManager) CreateDownload(ctx context.Context, downloadURL, fileName 
 
 	queue, err := q.queries.GetQueue(ctx, queueID)
 	if err != nil {
-		return fmt.Errorf("failed to get queue from db: %w", err)
+		slog.Error("failed to get queue from database", "queueID", queueID, "error", err)
+		return fmt.Errorf("failed to get queue: %w", err)
 	}
 
 	createDownloadParams := state.CreateDownloadParams{
 		QueueID:  queueID,
 		Url:      downloadURL,
 		SavePath: path.Join(queue.Directory, fileName),
-		State:    "",
+		State:    "PENDING",
 		Retries:  0,
 	}
 
 	download, err := q.queries.CreateDownload(ctx, createDownloadParams)
 	if err != nil {
-		return err
+		slog.Error("failed to create download", "params", createDownloadParams, "error", err)
+		return fmt.Errorf("failed to create download: %w", err)
 	}
 
 	events.GetUIEventChannel() <- events.Event{
@@ -78,14 +145,20 @@ func (q queueManager) CreateDownload(ctx context.Context, downloadURL, fileName 
 		Payload:   download,
 	}
 
+	slog.Info("download created successfully", "downloadID", download.ID)
+
+	if err := q.startNextDownloadIfPossible(ctx, queueID); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// CreateQueue implements QueueManager.
-func (q queueManager) CreateQueue(ctx context.Context, createQueueParams state.CreateQueueParams) error {
+func (q *queueManager) CreateQueue(ctx context.Context, createQueueParams state.CreateQueueParams) error {
 	queue, err := q.queries.CreateQueue(ctx, createQueueParams)
 	if err != nil {
-		return err
+		slog.Error("failed to create queue", "params", createQueueParams, "error", err)
+		return fmt.Errorf("failed to create queue: %w", err)
 	}
 
 	events.GetUIEventChannel() <- events.Event{
@@ -93,35 +166,54 @@ func (q queueManager) CreateQueue(ctx context.Context, createQueueParams state.C
 		Payload:   queue,
 	}
 
+	slog.Info("queue created successfully", "queueID", queue.ID)
 	return nil
 }
 
-func (q queueManager) DeleteDownload(ctx context.Context, id int64) error {
-	err := q.inProgressHandlers[id].Pause()
+func (q *queueManager) DeleteDownload(ctx context.Context, id int64) error {
+	q.mu.RLock()
+	handler, ok := q.inProgressHandlers[id]
+	q.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("download handler not found for ID %d", id)
+	}
+
+	if err := handler.Pause(); err != nil {
+		slog.Error("failed to pause download handler", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to pause download handler: %w", err)
+	}
+
+	currentDownload, err := q.queries.GetDownload(ctx, id)
 	if err != nil {
+		slog.Error("failed to get download details", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to get download details: %w", err)
+	}
+	queueID := currentDownload.QueueID // we need the queueID to for starting a new download
+
+	if err := q.queries.DeleteDownload(ctx, id); err != nil {
+		slog.Error("failed to delete download", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to delete download: %w", err)
+	}
+
+	q.mu.Lock()
+	delete(q.inProgressHandlers, id)
+	q.mu.Unlock()
+
+	slog.Info("download deleted successfully", "downloadID", id)
+
+	if err := q.startNextDownloadIfPossible(ctx, queueID); err != nil {
 		return err
 	}
 
-	current_download, err := q.queries.GetDownload(ctx, id)
-	if err != nil {
-		return err
-	}
-
-	queue_id := current_download.QueueID
-	nextDownload, err := q.queries.GetPausedDownloadByQueueID(ctx, queue_id)
-	if err == nil {
-		_, err = q.queries.SetDownloadState(ctx, state.SetDownloadStateParams{State: "IN_PROGRESS", ID: nextDownload.ID})
-		return err
-	}
-
-	return errors.Join(err, q.queries.DeleteDownload(ctx, id))
+	return nil
 }
 
-// DeleteQueue implements QueueManager.
-func (q queueManager) DeleteQueue(ctx context.Context, id int64) error {
+func (q *queueManager) DeleteQueue(ctx context.Context, id int64) error {
 	err := q.queries.DeleteQueue(ctx, id)
 	if err != nil {
-		return err
+		slog.Error("failed to delete queue", "queueID", id, "error", err)
+		return fmt.Errorf("failed to delete queue: %w", err)
 	}
 
 	events.GetUIEventChannel() <- events.Event{
@@ -129,13 +221,15 @@ func (q queueManager) DeleteQueue(ctx context.Context, id int64) error {
 		Payload:   id,
 	}
 
+	slog.Info("queue deleted successfully", "queueID", id)
 	return nil
 }
 
-func (q queueManager) EditQueue(ctx context.Context, arg state.UpdateQueueParams) error {
+func (q *queueManager) EditQueue(ctx context.Context, arg state.UpdateQueueParams) error {
 	queue, err := q.queries.UpdateQueue(ctx, arg)
 	if err != nil {
-		return err
+		slog.Error("failed to update queue", "params", arg, "error", err)
+		return fmt.Errorf("failed to update queue: %w", err)
 	}
 
 	events.GetUIEventChannel() <- events.Event{
@@ -143,33 +237,128 @@ func (q queueManager) EditQueue(ctx context.Context, arg state.UpdateQueueParams
 		Payload:   queue,
 	}
 
+	slog.Info("queue updated successfully", "queueID", queue.ID)
 	return nil
 }
 
-func (q queueManager) ListDownloadsWithQueueName(ctx context.Context) ([]state.ListDownloadsWithQueueNameRow, error) {
-	return q.queries.ListDownloadsWithQueueName(ctx)
+func (q *queueManager) ListDownloadsWithQueueName(ctx context.Context) ([]state.ListDownloadsWithQueueNameRow, error) {
+	downloads, err := q.queries.ListDownloadsWithQueueName(ctx)
+	if err != nil {
+		slog.Error("failed to list downloads with queue name", "error", err)
+		return nil, fmt.Errorf("failed to list downloads: %w", err)
+	}
+
+	slog.Info("listed downloads with queue name", "count", len(downloads))
+	return downloads, nil
 }
 
-// PauseDownload implements QueueManager.
-func (q queueManager) PauseDownload(ctx context.Context, id int64) error {
-	panic("unimplemented")
+func (q *queueManager) PauseDownload(ctx context.Context, id int64) error {
+	if err := q.setDownloadState(ctx, id, "PAUSED"); err != nil {
+		return err
+	}
+
+	currentDownload, err := q.queries.GetDownload(ctx, id)
+	if err != nil {
+		slog.Error("failed to get download details", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to get download details: %w", err)
+	}
+
+	q.mu.Lock()
+	handler, ok := q.inProgressHandlers[id]
+	if ok {
+		if err := handler.Pause(); err != nil {
+			q.mu.Unlock()
+			slog.Error("failed to pause download handler", "downloadID", id, "error", err)
+			return fmt.Errorf("failed to pause download handler: %w", err)
+		}
+		delete(q.inProgressHandlers, id)
+	}
+	q.mu.Unlock()
+
+	if err := q.startNextDownloadIfPossible(ctx, currentDownload.QueueID); err != nil {
+		return err
+	}
+
+	slog.Info("download paused successfully", "downloadID", id)
+	return nil
 }
 
-// ResumeDownload implements QueueManager.
-func (q queueManager) ResumeDownload(ctx context.Context, id int64) error {
-	panic("unimplemented")
+func (q *queueManager) ResumeDownload(ctx context.Context, id int64) error {
+	downloadConfig, err := q.queries.GetDownload(ctx, id)
+	if err != nil {
+		slog.Error("failed to get download configuration", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to get download configuration: %w", err)
+	}
+
+	downloadChunks, err := q.queries.GetDownloadChunksByDownloadID(ctx, id)
+	if err != nil {
+		slog.Error("failed to get download chunks", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to get download chunks: %w", err)
+	}
+
+	q.mu.Lock()
+	limiter, ok := q.queueLimiters[downloadConfig.QueueID]
+	if !ok {
+		queue, err := q.queries.GetQueue(ctx, downloadConfig.QueueID)
+		if err != nil {
+			q.mu.Unlock()
+			slog.Error("failed to get queue details", "queueID", downloadConfig.QueueID, "error", err)
+			return fmt.Errorf("failed to get queue details: %w", err)
+		}
+		if queue.MaxBandwidth.Valid {
+			limiter = bandwidthlimit.NewLimiter(&queue.MaxBandwidth.Int64)
+		} else {
+			limiter = bandwidthlimit.NewLimiter(nil)
+		}
+		q.queueLimiters[downloadConfig.QueueID] = limiter
+	}
+	q.mu.Unlock()
+
+	handler := downloads.NewDownloadHandler(downloadConfig, downloadChunks, limiter)
+
+	if err := q.setDownloadState(ctx, id, "IN_PROGRESS"); err != nil {
+		return err
+	}
+
+	q.mu.RLock()
+	q.inProgressHandlers[id] = handler
+	q.mu.RUnlock()
+
+	if err := handler.Start(); err != nil {
+		slog.Error("failed to start download handler", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to start download handler: %w", err)
+	}
+
+	slog.Info("download resumed successfully", "downloadID", id)
+	return nil
 }
 
-// RetryDownload implements QueueManager.
-func (q queueManager) RetryDownload(ctx context.Context, id int64) error {
-	panic("unimplemented")
+func (q *queueManager) RetryDownload(ctx context.Context, id int64) error {
+	_, err := q.queries.SetDownloadRetry(ctx, state.SetDownloadRetryParams{Retries: 0, ID: id})
+	if err != nil {
+		slog.Error("failed to set download retry count", "downloadID", id, "error", err)
+		return fmt.Errorf("failed to set download retry count: %w", err)
+	}
+
+	slog.Info("retrying download", "downloadID", id)
+	return q.ResumeDownload(ctx, id)
 }
 
-// ListQueue implements QueueManager.
-func (q queueManager) ListQueue(ctx context.Context) ([]state.Queue, error) {
-	return q.queries.ListQueues(ctx)
+func (q *queueManager) ListQueue(ctx context.Context) ([]state.Queue, error) {
+	queues, err := q.queries.ListQueues(ctx)
+	if err != nil {
+		slog.Error("failed to list queues", "error", err)
+		return nil, fmt.Errorf("failed to list queues: %w", err)
+	}
+
+	slog.Info("listed queues", "count", len(queues))
+	return queues, nil
 }
 
 func New(db *sql.DB) QueueManager {
-	return queueManager{queries: state.New(db)}
+	return &queueManager{
+		queries:            state.New(db),
+		inProgressHandlers: make(map[int64]downloads.DownloadHandler),
+		queueLimiters:      make(map[int64]*bandwidthlimit.Limiter),
+	}
 }

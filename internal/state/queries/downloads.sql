@@ -53,7 +53,7 @@ WHERE id = ?;
 SELECT * FROM download_chunks
 WHERE download_id = ?;
 
--- name: GetPausedDownloadByQueueID :one
+-- name: GetPendingDownloadByQueueID :one
 SELECT * FROM downloads
-WHERE queue_id = ? AND state = 'PAUSED'
+WHERE queue_id = ? AND state = 'PENDING'
 LIMIT 1;
