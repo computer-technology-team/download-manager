@@ -1,5 +1,7 @@
 package downloads
 
+import "github.com/computer-technology-team/download-manager.git/internal/state"
+
 type DownloadState string
 
 const (
@@ -20,4 +22,5 @@ type DownloadStatus struct {
 	ProgressPercentage float64
 	Speed              float64
 	State              DownloadState
+	DownloadChuncks    []state.DownloadChunk
 }

@@ -95,7 +95,6 @@ func (d *defaultDownloader) Start() error {
 	segmentsList := d.getChunkSegments(resp.Header)
 
 	if len(d.chunkHandlers) != numberOfChuncks {
-		fmt.Printf("Creating chunkssssssssssssssssssssssssss, %d", len(d.chunkHandlers))
 
 		chunkhandlersList := make([]*DownloadChunkHandler, 0)
 
@@ -184,10 +183,28 @@ func (d *defaultDownloader) Cancel() error {
 }
 
 func (d *defaultDownloader) status() DownloadStatus {
-	return DownloadStatus{
+	status := DownloadStatus{
 		ID:                 d.id,
 		ProgressPercentage: (float64(d.progress) / float64(d.size)) * 100,
 		Speed:              float64(d.progressRate),
 		State:              d.state,
+		DownloadChuncks:    nil,
 	}
+
+	chunkList := make([]state.DownloadChunk, numberOfChuncks)
+
+	for i, chunkHandler := range d.chunkHandlers {
+		downloadChunk := state.DownloadChunk{
+			ID:             chunkHandler.chunckID,
+			RangeStart:     chunkHandler.rangeStart,
+			RangeEnd:       chunkHandler.rangeEnd,
+			CurrentPointer: chunkHandler.currentPointer,
+			DownloadID:     d.id,
+		}
+		chunkList[i] = downloadChunk
+	}
+
+	status.DownloadChuncks = chunkList
+
+	return status
 }
