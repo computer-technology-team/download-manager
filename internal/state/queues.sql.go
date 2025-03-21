@@ -7,6 +7,19 @@ import (
 	"database/sql"
 )
 
+const countInProgressDownloadsInQueue = `-- name: CountInProgressDownloadsInQueue :one
+SELECT COUNT(*) 
+FROM downloads
+WHERE queue_id = ? AND status = 'IN_PROGRESS'
+`
+
+func (q *Queries) CountInProgressDownloadsInQueue(ctx context.Context, queueID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countInProgressDownloadsInQueue, queueID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createQueue = `-- name: CreateQueue :one
 INSERT INTO queues (name, directory, max_bandwidth, start_download, end_download, retry_limit, max_concurrent, schedule_mode)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -117,6 +130,17 @@ func (q *Queries) ListQueues(ctx context.Context) ([]Queue, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateInProgressToPendingInQueue = `-- name: UpdateInProgressToPendingInQueue :exec
+UPDATE downloads
+SET status = 'PENDING'
+WHERE status = 'IN_PROGRESS' AND queue_id = ?
+`
+
+func (q *Queries) UpdateInProgressToPendingInQueue(ctx context.Context, queueID int64) error {
+	_, err := q.db.ExecContext(ctx, updateInProgressToPendingInQueue, queueID)
+	return err
 }
 
 const updateQueue = `-- name: UpdateQueue :one

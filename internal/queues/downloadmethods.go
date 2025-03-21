@@ -29,7 +29,7 @@ func (q *queueManager) PauseDownload(ctx context.Context, id int64) error {
 		slog.Error("invalid state", "current_download_state", currentDownload.State)
 		return errors.New("can not pause download that is not in progress")
 	}
-
+  
 	q.mu.Lock()
 	handler, ok := q.inProgressHandlers[id]
 	if ok {
@@ -193,6 +193,7 @@ func (q *queueManager) DeleteDownload(ctx context.Context, id int64) error {
 		slog.Error("failed to get download details", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to get download details: %w", err)
 	}
+
 	queueID := currentDownload.QueueID 
 
 	if err := q.queries.DeleteDownload(ctx, id); err != nil {

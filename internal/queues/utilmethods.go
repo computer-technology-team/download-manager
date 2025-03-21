@@ -61,6 +61,7 @@ func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID 
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
+
 		slog.Error("failed to get pending download by queue ID", "queueID", queueID, "error", err)
 		return err
 	}
@@ -116,7 +117,6 @@ func (q *queueManager) UpsertChunks(ctx context.Context, status downloads.Downlo
 }
 
 func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
-
 	download, err := q.queries.GetDownload(ctx, id)
 	if err != nil {
 		slog.Error("failed to get download details", "downloadID", id, "error", err)
@@ -130,7 +130,6 @@ func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
 	}
 
 	if download.Retries < queue.RetryLimit {
-
 		if _, err := q.queries.SetDownloadRetry(ctx, state.SetDownloadRetryParams{
 			Retries: download.Retries + 1,
 			ID:      id,
@@ -168,7 +167,6 @@ func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
 }
 
 func (q *queueManager) DownloadCompleted(ctx context.Context, id int64) error {
-
 	if err := q.setDownloadState(ctx, id, string(downloads.StateCompleted)); err != nil {
 		slog.Error("failed to set download state to completed", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to set download state to completed: %w", err)

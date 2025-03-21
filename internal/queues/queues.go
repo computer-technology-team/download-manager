@@ -18,18 +18,20 @@ var (
 )
 
 type QueueManager interface {
-
+	// download methods
 	PauseDownload(ctx context.Context, id int64) error
 	ResumeDownload(ctx context.Context, id int64) error
 	RetryDownload(ctx context.Context, id int64) error
 	CreateDownload(ctx context.Context, url, fileName string, queueID int64) error
 	DeleteDownload(ctx context.Context, id int64) error
 
+	// queue methods
 	CreateQueue(ctx context.Context, createQueueParams state.CreateQueueParams) error
 	DeleteQueue(ctx context.Context, id int64) error
 	ListQueue(ctx context.Context) ([]state.Queue, error)
 	EditQueue(ctx context.Context, arg state.UpdateQueueParams) error
 
+	// utility methods
 	DownloadFailed(ctx context.Context, id int64) error
 	DownloadCompleted(ctx context.Context, id int64) error
 	UpsertChunks(ctx context.Context, status downloads.DownloadStatus) error
@@ -109,6 +111,8 @@ func (q *queueManager) init(ctx context.Context) error {
 
 		slog.Info("resumed in-progress download during initialization", "downloadID", download.ID)
 	}
+
+	go q.scheduler(ctx)
 
 	slog.Info("initialization completed successfully")
 	return nil
