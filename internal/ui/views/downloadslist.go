@@ -153,30 +153,57 @@ func (m downloadsListView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 }
 
 func (m *downloadsListView) pause() tea.Cmd {
-	_, err := m.getUnderCursorDownload()
+	download, err := m.getUnderCursorDownload()
 	if err != nil {
 		return createErrorCmd(types.ErrorMsg{Err: err})
 	}
 
-	return nil
+	return func() tea.Msg {
+		err := m.queueManager.PauseDownload(context.Background(), download.ID)
+		if err != nil {
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not resume download: %w", err),
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m *downloadsListView) resume() tea.Cmd {
-	_, err := m.getUnderCursorDownload()
+	download, err := m.getUnderCursorDownload()
 	if err != nil {
 		return createErrorCmd(types.ErrorMsg{Err: err})
 	}
 
-	return nil
+	return func() tea.Msg {
+		err := m.queueManager.ResumeDownload(context.Background(), download.ID)
+		if err != nil {
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not resume download: %w", err),
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m *downloadsListView) retry() tea.Cmd {
-	_, err := m.getUnderCursorDownload()
+	download, err := m.getUnderCursorDownload()
 	if err != nil {
 		return createErrorCmd(types.ErrorMsg{Err: err})
 	}
 
-	return nil
+	return func() tea.Msg {
+		err := m.queueManager.RetryDownload(context.Background(), download.ID)
+		if err != nil {
+			return types.ErrorMsg{
+				Err: fmt.Errorf("could not resume download: %w", err),
+			}
+		}
+
+		return nil
+	}
 }
 
 func (m downloadsListView) View() string {
