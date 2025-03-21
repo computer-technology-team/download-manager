@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
 	"github.com/computer-technology-team/download-manager.git/internal/events"
@@ -19,7 +20,7 @@ import (
 
 const progressUpdatePeriod int = 1
 
-const movingAverageScale float64 = .7 // new average = old * (1 - alpha) + current * alpha
+const movingAverageScale float64 = .75 // new average = old * (1 - alpha) + current * alpha
 const numberOfChuncks = 10
 
 type defaultDownloader struct {
@@ -83,7 +84,15 @@ func (d *defaultDownloader) Start() error {
 	d.ctx, d.ctxCancel = context.WithCancel(context.Background())
 
 	req, err := http.NewRequest("HEAD", d.url, nil)
-	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	httpClient := http.Client{Transport: &http.Transport{
+		DisableCompression: true,
+	}}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		fmt.Println("Error in requesting header: ", err)
 		// TODO log.Fatal(err)
@@ -95,7 +104,6 @@ func (d *defaultDownloader) Start() error {
 	segmentsList := d.getChunkSegments(resp.Header)
 
 	if len(d.chunkHandlers) != numberOfChuncks {
-
 		chunkhandlersList := make([]*DownloadChunkHandler, 0)
 
 		for _, segment := range segmentsList {
@@ -116,7 +124,7 @@ func (d *defaultDownloader) Start() error {
 	}
 
 	for _, handler := range d.chunkHandlers {
-		handler.Start(d.url, d.limiter, d.writer)
+		handler.Start(d.ctx, d.url, d.limiter, d.writer)
 	}
 
 	d.reportProgress()
@@ -128,7 +136,7 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 	//TODO this is a prototype
 
 	size, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
-	d.size = int64(size)
+	d.size = size
 	if err != nil {
 		fmt.Println("no content length header", err) // TODO
 	}
@@ -146,6 +154,7 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 	for ; chunkSize*i < size; i++ {
 		segmentsList = append(segmentsList, []int64{i * chunkSize, min((i+1)*chunkSize, size)})
 	}
+	fmt.Println(len(segmentsList))
 
 	return segmentsList
 }
@@ -156,7 +165,7 @@ func (d *defaultDownloader) Pause() error {
 			d.ctxCancel()
 		}
 
-		*d.pausedChan = make(chan int)
+		d.pausedChan = lo.ToPtr(make(chan int))
 		d.state = StatePaused
 		d.writer.Close()
 	}
