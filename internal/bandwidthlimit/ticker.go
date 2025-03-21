@@ -1,6 +1,7 @@
 package bandwidthlimit
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -34,6 +35,7 @@ func (t *Ticker) generate() {
 	for {
 		select {
 		case <-t.generationQuiteChan:
+			fmt.Println("stoppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
 			return
 		default:
 			t.tokens <- 0

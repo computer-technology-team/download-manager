@@ -3,6 +3,7 @@ package downloads
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,7 +16,8 @@ import (
 	"github.com/google/uuid"
 )
 
-const progressUpdatePeriod int = 1000 // milliseconds
+const progressUpdatePeriod int = 1
+
 const movingAverageScale float64 = .1 // new average = old * (1 - alpha) + current * alpha
 const numberOfChuncks = 10
 
@@ -41,20 +43,29 @@ func (d *defaultDownloader) GetTicker() *bandwidthlimit.Ticker {
 }
 
 func (d *defaultDownloader) keepTrackOfProgress() {
+	d.reportProgress()
 	for {
 		select {
 		case <-d.ctx.Done():
+			d.reportProgress()
 			return
-		case <-time.After(time.Duration(progressUpdatePeriod)):
-			currentProgress := d.getTotalProgress()
-			newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
-			d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
-			d.progress = currentProgress
-			events.GetChannel() <- events.Event{
-				EventType: events.DownloadProgressed,
-				Payload:   d.status(),
-			}
+		case <-time.After(time.Second * time.Duration(progressUpdatePeriod)):
+			d.reportProgress()
 		}
+	}
+}
+
+func (d *defaultDownloader) reportProgress() {
+	if d.state == StateInProgress {
+		currentProgress := d.getTotalProgress()
+		newRate := float64(currentProgress-d.progress) / float64(progressUpdatePeriod)
+		d.progressRate = d.progressRate*(1-movingAverageScale) + newRate*movingAverageScale
+		d.progress = currentProgress
+	}
+
+	events.GetChannel() <- events.Event{
+		EventType: events.DownloadProgressed,
+		Payload:   d.status(),
 	}
 }
 
@@ -68,7 +79,7 @@ func (d *defaultDownloader) getTotalProgress() int64 {
 
 func (d *defaultDownloader) Start() error {
 	if d.state == StatePaused {
-		*d.pausedChan = make(chan int)
+		close(*d.pausedChan)
 	}
 
 	d.state = StateInProgress
@@ -81,16 +92,14 @@ func (d *defaultDownloader) Start() error {
 		// TODO log.Fatal(err)
 	}
 
-	// for k, vs := range resp.Header { // TODO test if
-	// 	fmt.Printf("%s: %d, %+v\n", k, len(vs), vs)
-	// }
-
 	d.url = resp.Request.URL.String()
 
 	d.writer = NewSynchronizedFileWriter(d.savePath)
 	segmentsList := d.getChunkSegments(resp.Header)
 
 	if len(d.chunkHandlers) != numberOfChuncks {
+		fmt.Printf("Creating chunkssssssssssssssssssssssssss, %d", len(d.chunkHandlers))
+
 		chunkhandlersList := make([]*DownloadChunkHandler, 0)
 
 		for _, segment := range segmentsList {
@@ -116,6 +125,7 @@ func (d *defaultDownloader) Start() error {
 
 	d.ticker.Start()
 
+	d.reportProgress()
 	go d.keepTrackOfProgress()
 	return nil
 }
@@ -123,23 +133,24 @@ func (d *defaultDownloader) Start() error {
 func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 	//TODO this is a prototype
 
-	size, err := strconv.Atoi(header.Get("Content-Length"))
+	size, err := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
 	d.size = int64(size)
 	if err != nil {
 		fmt.Println("no content length header", err) // TODO
 	}
 
 	if header.Get("Accept-Ranges") != "bytes" {
-		fmt.Errorf("server does not accept range requests") // TODO need an if on test mode
+		fmt.Println("server does not accept range requests") // TODO need an if on test mode
 		return [][]int64{{0, int64(size)}}
 	}
 
-	chunkSize := int(size / numberOfChuncks)
+	chunkSize := int64(math.Ceil(float64(size) / numberOfChuncks))
 
 	segmentsList := make([][]int64, 0)
 
-	for i := 0; chunkSize*i < size; i++ {
-		segmentsList = append(segmentsList, []int64{int64(i * chunkSize), int64(min((i+1)*chunkSize, size))})
+	var i int64
+	for ; chunkSize*i < size; i++ {
+		segmentsList = append(segmentsList, []int64{i * chunkSize, min((i+1)*chunkSize, size)})
 	}
 
 	return segmentsList
@@ -147,7 +158,11 @@ func (d *defaultDownloader) getChunkSegments(header http.Header) [][]int64 {
 
 func (d *defaultDownloader) Pause() error {
 	if d.state == StateInProgress {
-		close(*d.pausedChan)
+		if d.ctxCancel != nil {
+			d.ctxCancel()
+		}
+
+		*d.pausedChan = make(chan int)
 		d.state = StatePaused
 		d.writer.Close()
 	}
@@ -170,14 +185,16 @@ func (d *defaultDownloader) Cancel() error {
 		}
 	}
 
+	d.GetTicker().Stop()
+
 	return nil
 }
 
 func (d *defaultDownloader) status() DownloadStatus {
 	return DownloadStatus{
 		ID:                 d.id,
-		ProgressPercentage: float32(d.progress),
-		Speed:              float32(d.progressRate),
+		ProgressPercentage: (float64(d.progress) / float64(d.size)) * 100,
+		Speed:              float64(d.progressRate),
 		State:              d.state,
 	}
 }

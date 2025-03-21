@@ -7,6 +7,7 @@ import (
 
 func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.DownloadChunk, ticker bandwidthlimit.Ticker) DownloadHandler {
 	pausedChan := make(chan int, 1)
+	close(pausedChan)
 
 	defDow := defaultDownloader{
 		id:            downloadConfig.ID,
