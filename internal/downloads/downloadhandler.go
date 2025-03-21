@@ -27,7 +27,6 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 		pausedChan:    nil,
 		ctx:           nil,
 		ctxCancel:     nil,
-		writer:        NewSynchronizedFileWriter(downloadConfig.SavePath),
 		failedChannel: make(chan error, numberOfChuncks),
 		wg:            sync.WaitGroup{},
 	}
@@ -58,6 +57,8 @@ func NewDownloadHandler(downloadConfig state.Download, downloadChuncks []state.D
 			return nil, fmt.Errorf("error checking file at %s: %w", savePath, err)
 		}
 	}
+
+	defDow.writer = NewSynchronizedFileWriter(downloadConfig.SavePath)
 
 	return &defDow, nil
 }
