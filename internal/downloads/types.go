@@ -9,6 +9,7 @@ const (
 	StatePaused     DownloadState = "PAUSED"
 	StateCompleted  DownloadState = "COMPLETED"
 	StateFailed     DownloadState = "FAILED"
+	StatePending    DownloadState = "PENDING"
 )
 
 type DownloadHandler interface {

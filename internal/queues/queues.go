@@ -130,7 +130,7 @@ func (q *queueManager) CreateDownload(ctx context.Context, downloadURL, fileName
 		QueueID:  queueID,
 		Url:      downloadURL,
 		SavePath: path.Join(queue.Directory, fileName),
-		State:    "PENDING",
+		State:    string(downloads.StatePending),
 		Retries:  0,
 	}
 
@@ -253,7 +253,7 @@ func (q *queueManager) ListDownloadsWithQueueName(ctx context.Context) ([]state.
 }
 
 func (q *queueManager) PauseDownload(ctx context.Context, id int64) error {
-	if err := q.setDownloadState(ctx, id, "PAUSED"); err != nil {
+	if err := q.setDownloadState(ctx, id, string(downloads.StatePaused)); err != nil {
 		return err
 	}
 
@@ -316,7 +316,7 @@ func (q *queueManager) ResumeDownload(ctx context.Context, id int64) error {
 
 	handler := downloads.NewDownloadHandler(downloadConfig, downloadChunks, limiter)
 
-	if err := q.setDownloadState(ctx, id, "IN_PROGRESS"); err != nil {
+	if err := q.setDownloadState(ctx, id, string(downloads.StateInProgress)); err != nil {
 		return err
 	}
 
@@ -355,10 +355,71 @@ func (q *queueManager) ListQueue(ctx context.Context) ([]state.Queue, error) {
 	return queues, nil
 }
 
-func New(db *sql.DB) QueueManager {
-	return &queueManager{
+func New(db *sql.DB) (QueueManager, error) {
+	qm := &queueManager{
 		queries:            state.New(db),
 		inProgressHandlers: make(map[int64]downloads.DownloadHandler),
 		queueLimiters:      make(map[int64]*bandwidthlimit.Limiter),
 	}
+
+	if err := qm.init(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to initialize QueueManager: %w", err)
+	}
+
+	return qm, nil
+}
+
+func (q *queueManager) init(ctx context.Context) error {
+	// List queues
+	queues, err := q.queries.ListQueues(ctx)
+	if err != nil {
+		slog.Error("failed to list queues during initialization", "error", err)
+		return fmt.Errorf("failed to list queues during initialization: %w", err)
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Initialize limiters
+	for _, queue := range queues {
+		if queue.MaxBandwidth.Valid {
+			q.queueLimiters[queue.ID] = bandwidthlimit.NewLimiter(&queue.MaxBandwidth.Int64)
+		} else {
+			q.queueLimiters[queue.ID] = bandwidthlimit.NewLimiter(nil)
+		}
+	}
+
+	// Initialize IN_PROGRESS downloads
+	inProgressDownloads, err := q.queries.GetDownloadsByStatus(ctx, string(downloads.StateInProgress))
+	if err != nil {
+		slog.Error("failed to get in-progress downloads during initialization", "error", err)
+		return fmt.Errorf("failed to get in-progress downloads during initialization: %w", err)
+	}
+
+	for _, download := range inProgressDownloads {
+		downloadChunks, err := q.queries.GetDownloadChunksByDownloadID(ctx, download.ID)
+		if err != nil {
+			slog.Error("failed to get download chunks for in-progress download", "downloadID", download.ID, "error", err)
+			return fmt.Errorf("failed to get download chunks for in-progress download: %w", err)
+		}
+
+		limiter, ok := q.queueLimiters[download.QueueID]
+		if !ok {
+			slog.Error("limiter not found for queue during initialization", "queueID", download.QueueID)
+			return fmt.Errorf("limiter not found for queue %d", download.QueueID)
+		}
+
+		handler := downloads.NewDownloadHandler(download, downloadChunks, limiter)
+		q.inProgressHandlers[download.ID] = handler
+
+		if err := handler.Start(); err != nil {
+			slog.Error("failed to start in-progress download handler", "downloadID", download.ID, "error", err)
+			return fmt.Errorf("failed to start in-progress download handler: %w", err)
+		}
+
+		slog.Info("resumed in-progress download during initialization", "downloadID", download.ID)
+	}
+
+	slog.Info("initialization completed successfully")
+	return nil
 }
