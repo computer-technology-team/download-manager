@@ -57,3 +57,8 @@ WHERE download_id = ?;
 SELECT * FROM downloads
 WHERE queue_id = ? AND state = 'PENDING'
 LIMIT 1;
+
+-- name: GetDownloadsByStatus :many
+SELECT * 
+FROM downloads
+WHERE state = ?;
