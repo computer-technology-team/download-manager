@@ -48,7 +48,6 @@ func (d *defaultDownloader) keepTrackOfProgress() {
 	for {
 		select {
 		case <-d.ctx.Done():
-			slog.Info("context canceled in keep track")
 			d.reportProgress()
 			return
 		case <-time.After(time.Second * time.Duration(progressUpdatePeriod)):
@@ -187,7 +186,6 @@ func (d *defaultDownloader) Pause() error {
 	d.wg.Wait()
 	d.writer.Close()
 
-	slog.Info("paused")
 	return nil
 }
 
@@ -240,12 +238,11 @@ func (d *defaultDownloader) status() DownloadStatus {
 func (d *defaultDownloader) listenForFailiure() {
 	select {
 	case err := <-d.failedChannel:
-		slog.Info("failed channel")
 		_ = d.Pause()
 
 		events.GetEventChannel() <- events.Event{
 			EventType: events.DownloadFailed,
-			Payload:   events.DownloadFailedEvent{Error: err},
+			Payload:   events.DownloadFailedEvent{Error: err, ID: d.id, URL: d.url},
 		}
 		return
 	case <-d.ctx.Done():

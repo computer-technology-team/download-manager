@@ -92,10 +92,17 @@ func (d downloadManagerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		cmds = append(cmds, listenForEvent)
 
-		if v.EventType == events.DownloadCompleted {
+		switch v.EventType {
+		case events.DownloadCompleted:
 			status := v.Payload.(downloads.DownloadStatus)
 			cmds = append(cmds, createCmd(types.NotifMsg{
 				Msg: fmt.Sprintf("Download has finished: %s", status.URL),
+			}))
+		case events.DownloadFailed:
+			event := v.Payload.(events.DownloadFailedEvent)
+			cmds = append(cmds, createCmd(types.ErrorMsg{
+				Err: fmt.Errorf("download from %s failed: %w", event.URL,
+					event.Error),
 			}))
 		}
 

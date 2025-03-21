@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/computer-technology-team/download-manager.git/internal/bandwidthlimit"
-	"github.com/computer-technology-team/download-manager.git/internal/events"
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
@@ -56,10 +55,6 @@ func (chunkHandler *DownloadChunkHandler) start(ctx context.Context, url string,
 	resp, err := chunkHandler.sendRequest(ctx, url, chunkHandler.currentPointer, chunkHandler.rangeEnd)
 	if err != nil {
 		slog.Error("error sending request", "error", err)
-		events.GetEventChannel() <- events.Event{
-			EventType: events.DownloadFailed,
-			Payload:   events.DownloadFailedEvent{},
-		}
 
 		chunkHandler.failedChan <- err
 
