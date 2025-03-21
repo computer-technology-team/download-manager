@@ -47,15 +47,14 @@ func (chunkHandler *DownloadChunkHandler) start(url string, limiter *bandwidthli
 		//TODO handle error
 	}
 
-	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer+chunkHandler.rangeStart)
+	writer := io.NewOffsetWriter(syncWriter, chunkHandler.currentPointer)
 
 	reader := bandwidthlimit.NewLimitedReader(context.Background(),
 		sendRequest(url, conn, chunkHandler.rangeStart, chunkHandler.rangeEnd), limiter)
 	for {
 		<-*chunkHandler.pausedChan
 
-		n, err := io.Copy(writer, reader)
-
+		n, err := io.CopyN(writer, reader, 1<<14)
 		if err != nil {
 			fmt.Println("Error reading:", err) //TODO
 			return

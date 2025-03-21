@@ -19,7 +19,7 @@ import (
 
 const progressUpdatePeriod int = 1
 
-const movingAverageScale float64 = .1 // new average = old * (1 - alpha) + current * alpha
+const movingAverageScale float64 = .7 // new average = old * (1 - alpha) + current * alpha
 const numberOfChuncks = 10
 
 type defaultDownloader struct {
