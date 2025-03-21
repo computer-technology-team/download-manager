@@ -19,7 +19,7 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
-const progressUpdatePeriod int = 10
+const progressUpdatePeriod int = 1
 
 const movingAverageScale float64 = .75 // new average = old * (1 - alpha) + current * alpha
 const numberOfChuncks = 10
