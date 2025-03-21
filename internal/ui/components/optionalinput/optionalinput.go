@@ -8,14 +8,12 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/ui/types"
 )
 
-// Define styles using lipgloss
 var (
 	enabledStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	disabledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	checkboxStyle = lipgloss.NewStyle().Bold(true)
 )
 
-// It implements types.Input[*T] while accepting a types.Input[T].
 type OptionalInput[T comparable] struct {
 	input      types.Input[T]
 	enabled    bool
@@ -23,7 +21,6 @@ type OptionalInput[T comparable] struct {
 	toggleKeys keyMap
 }
 
-// New creates a new OptionalInput that wraps the provided input.
 func New[T comparable](input types.Input[T]) *OptionalInput[T] {
 	return &OptionalInput[T]{
 		input:      input,
@@ -104,7 +101,6 @@ func (o *OptionalInput[T]) IsEnabled() bool {
 	return o.enabled
 }
 
-// ShortHelp returns keybinding help.
 func (o *OptionalInput[T]) ShortHelp() []key.Binding {
 	if o.enabled {
 		return append(o.input.ShortHelp(), o.toggleKeys.Toggle)

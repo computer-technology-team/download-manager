@@ -13,7 +13,7 @@ type SynchronizedFileWriter struct {
 func NewSynchronizedFileWriter(filePath string) *SynchronizedFileWriter {
 	var file, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		panic("failed to open file") // TODO
+		panic("failed to open file") 
 	}
 	return &SynchronizedFileWriter{
 		mutex: &sync.Mutex{},

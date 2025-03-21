@@ -13,7 +13,6 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
-// Common errors
 var (
 	ErrEmptyFileName = errors.New("empty file name: URL does not contain a valid file name")
 )
@@ -61,7 +60,7 @@ func New(db *sql.DB) (QueueManager, error) {
 }
 
 func (q *queueManager) init(ctx context.Context) error {
-	// List queues
+
 	queues, err := q.queries.ListQueues(ctx)
 	if err != nil {
 		slog.Error("failed to list queues during initialization", "error", err)
@@ -71,7 +70,6 @@ func (q *queueManager) init(ctx context.Context) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	// Initialize limiters
 	for _, queue := range queues {
 		if queue.MaxBandwidth.Valid {
 			q.queueLimiters[queue.ID] = bandwidthlimit.NewLimiter(&queue.MaxBandwidth.Int64)
@@ -80,7 +78,6 @@ func (q *queueManager) init(ctx context.Context) error {
 		}
 	}
 
-	// Initialize IN_PROGRESS downloads
 	inProgressDownloads, err := q.queries.GetDownloadsByStatus(ctx, string(downloads.StateInProgress))
 	if err != nil {
 		slog.Error("failed to get in-progress downloads during initialization", "error", err)

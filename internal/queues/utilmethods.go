@@ -11,7 +11,6 @@ import (
 	"github.com/computer-technology-team/download-manager.git/internal/state"
 )
 
-// Helper function to set download state
 func (q *queueManager) setDownloadState(ctx context.Context, id int64, downloadState string) error {
 	param := state.SetDownloadStateParams{State: downloadState, ID: id}
 	_, err := q.queries.SetDownloadState(ctx, param)
@@ -28,36 +27,44 @@ func (q *queueManager) setDownloadState(ctx context.Context, id int64, downloadS
 	return nil
 }
 
-// Helper function to start the next download of a queue if it has capacity
 func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID int64) error {
-	activeDownloads, err := q.queries.CountInProgressDownloadsInQueue(ctx, queueID)
+	var activeDownloads int64 = 0
 
-	if err != nil {
-		slog.Error("could not get the number of in-progress downloads", "queueID", queueID, "error", err)
-		return fmt.Errorf("could not get the number of in-progress downloads: %w", err)
+	q.mu.RLock()
+	for id := range q.inProgressHandlers {
+		download, err := q.queries.GetDownload(ctx, id)
+		if err != nil {
+			q.mu.RUnlock()
+			slog.Error("failed to get download details", "downloadID", id, "error", err)
+			return fmt.Errorf("failed to get download details: %w", err)
+		}
+		if download.QueueID == queueID {
+			activeDownloads++
+		}
 	}
-
-	// Get the queue's MaxConcurrent limit from the database
+	q.mu.RUnlock()
+  
 	queue, err := q.queries.GetQueue(ctx, queueID)
 	if err != nil {
 		slog.Error("failed to get queue details", "queueID", queueID, "error", err)
 		return fmt.Errorf("failed to get queue details: %w", err)
 	}
 
-	// If the queue is full, do nothing and return nil
 	if activeDownloads >= queue.MaxConcurrent {
 		slog.Info("queue is full, cannot start next download", "queueID", queueID, "activeDownloads", activeDownloads, "maxConcurrent", queue.MaxConcurrent)
 		return nil
 	}
 
-	// Get the next pending download for the queue
 	nextDownload, err := q.queries.GetPendingDownloadByQueueID(ctx, queueID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+
 		slog.Error("failed to get pending download by queue ID", "queueID", queueID, "error", err)
 		return err
 	}
 
-	// Resume the next download using the existing ResumeDownload method
 	if err := q.ResumeDownload(ctx, nextDownload.ID); err != nil {
 		slog.Error("failed to resume download", "downloadID", nextDownload.ID, "error", err)
 		return fmt.Errorf("failed to resume download: %w", err)
@@ -67,19 +74,18 @@ func (q *queueManager) startNextDownloadIfPossible(ctx context.Context, queueID 
 	return nil
 }
 
-// Helper function to start the next download in the queue associated with the given download ID
+
 func (q *queueManager) startNextDownloadIfPossibleByDownloadID(ctx context.Context, downloadID int64) error {
-	// Fetch the download details from the database
+
 	download, err := q.queries.GetDownload(ctx, downloadID)
 	if err != nil {
 		slog.Error("failed to get download details", "downloadID", downloadID, "error", err)
 		return fmt.Errorf("failed to get download details: %w", err)
 	}
 
-	// Get the queue ID associated with the download
+
 	queueID := download.QueueID
 
-	// Call the existing startNextDownloadIfPossible method with the queue ID
 	return q.startNextDownloadIfPossible(ctx, queueID)
 }
 
@@ -112,23 +118,20 @@ func (q *queueManager) UpsertChunks(ctx context.Context, status downloads.Downlo
 }
 
 func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
-	// Fetch the download details from the database
 	download, err := q.queries.GetDownload(ctx, id)
 	if err != nil {
 		slog.Error("failed to get download details", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to get download details: %w", err)
 	}
 
-	// Fetch the queue details to check the maximum retry limit
 	queue, err := q.queries.GetQueue(ctx, download.QueueID)
 	if err != nil {
 		slog.Error("failed to get queue details", "queueID", download.QueueID, "error", err)
 		return fmt.Errorf("failed to get queue details: %w", err)
 	}
 
-	// Check if the download can be retried
+
 	if download.Retries < queue.RetryLimit {
-		// Increment the retry count
 		if _, err := q.queries.SetDownloadRetry(ctx, state.SetDownloadRetryParams{
 			Retries: download.Retries + 1,
 			ID:      id,
@@ -137,7 +140,6 @@ func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
 			return fmt.Errorf("failed to set download retry count: %w", err)
 		}
 
-		// Retry the download
 		if err := q.ResumeDownload(ctx, id); err != nil {
 			slog.Error("failed to retry download", "downloadID", id, "error", err)
 			return fmt.Errorf("failed to retry download: %w", err)
@@ -147,20 +149,17 @@ func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
 		return nil
 	}
 
-	// If retries are exhausted, mark the download as failed
 	if err := q.setDownloadState(ctx, id, string(downloads.StateFailed)); err != nil {
 		slog.Error("failed to set download state to failed", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to set download state to failed: %w", err)
 	}
 
-	// Remove the download handler from the in-progress map
 	q.mu.Lock()
 	delete(q.inProgressHandlers, id)
 	q.mu.Unlock()
 
 	slog.Info("download marked as failed", "downloadID", id)
 
-	// Start the next download in the queue if possible
 	if err := q.startNextDownloadIfPossibleByDownloadID(ctx, id); err != nil {
 		slog.Error("failed to start next download in queue", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to start next download in queue: %w", err)
@@ -170,7 +169,6 @@ func (q *queueManager) DownloadFailed(ctx context.Context, id int64) error {
 }
 
 func (q *queueManager) DownloadCompleted(ctx context.Context, id int64) error {
-	// Set the download state to completed
 	if err := q.setDownloadState(ctx, id, string(downloads.StateCompleted)); err != nil {
 		slog.Error("failed to set download state to completed", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to set download state to completed: %w", err)
@@ -178,7 +176,6 @@ func (q *queueManager) DownloadCompleted(ctx context.Context, id int64) error {
 
 	slog.Info("download marked as completed", "downloadID", id)
 
-	// Start the next download in the queue if possible
 	if err := q.startNextDownloadIfPossibleByDownloadID(ctx, id); err != nil {
 		slog.Error("failed to start next download in queue", "downloadID", id, "error", err)
 		return fmt.Errorf("failed to start next download in queue: %w", err)

@@ -139,7 +139,6 @@ func (v queueForm) initCmds() []tea.Cmd {
 	}
 }
 
-// inputsError returns a joined error of all input validation errors
 func (v queueForm) inputsError() error {
 	return errors.Join(
 		v.name.Error(),
@@ -169,7 +168,6 @@ func (v queueForm) View() string {
 
 	sb.WriteString("Queue Form\n\n")
 
-	// Name input
 	sb.WriteString("Name: ")
 	if v.focus == name {
 		sb.WriteString(inputLocationGuide)
@@ -181,7 +179,6 @@ func (v queueForm) View() string {
 	}
 	sb.WriteString("\n")
 
-	// Bandwidth limit input
 	sb.WriteString("Bandwidth Limit (Bytes Per Second): ")
 	if v.focus == bandwidthLimitBPS {
 		sb.WriteString(inputLocationGuide)
@@ -195,7 +192,6 @@ func (v queueForm) View() string {
 	}
 	sb.WriteString("\n")
 
-	// Directory picker
 	sb.WriteString("Download Directory: ")
 	if v.focus == directoryPicker {
 		sb.WriteString(inputLocationGuide)
@@ -208,7 +204,6 @@ func (v queueForm) View() string {
 
 	sb.WriteString("\n")
 
-	// Max concurrent downloads
 	sb.WriteString("Max Concurrent Downloads: ")
 	if v.focus == maxConcurrentDownload {
 		sb.WriteString(inputLocationGuide)
@@ -220,7 +215,6 @@ func (v queueForm) View() string {
 	}
 	sb.WriteString("\n")
 
-	// Retry limit
 	sb.WriteString("Retry Limit: ")
 	if v.focus == retryLimit {
 		sb.WriteString(inputLocationGuide)
@@ -232,7 +226,6 @@ func (v queueForm) View() string {
 	}
 	sb.WriteString("\n")
 
-	// Start time
 	sb.WriteString("Schedule: ")
 	if v.focus == startEndTime {
 		sb.WriteString(inputLocationGuide)
@@ -247,7 +240,6 @@ func (v queueForm) View() string {
 
 	sb.WriteString(v.submit.View())
 
-	// Form-level error message if any
 	if v.err != nil {
 		sb.WriteString("\nError: " + v.err.Error() + "\n\n")
 	}
@@ -340,7 +332,7 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			if v.focus == submit {
-				// Check which button is selected
+
 				selectedButton := v.submit.SelectedButton().(button)
 				if selectedButton.slug == string(submitButton) {
 
@@ -405,7 +397,7 @@ func (v queueForm) Update(msg tea.Msg) (queueForm, tea.Cmd) {
 			}
 		}
 	default:
-		// Update all inputs and collect their commands
+
 		var nameInput types.Input[string]
 		var cmd tea.Cmd
 		nameInput, cmd = v.name.Update(msg)
@@ -526,7 +518,6 @@ func NewQueueEditForm(queue state.Queue,
 	}
 
 	startTimeInput := optionalinput.New(startendtimeinput.New())
-	//do this
 
 	buttonRow, err := buttonrow.New([]buttonrow.Button{
 		button{label: "Submit", slug: string(submitButton), color: lipgloss.Color("#00FF00")},

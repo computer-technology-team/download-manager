@@ -13,7 +13,7 @@ type Model struct {
 }
 
 func (m Model) View() string {
-	// Use DisableColor option to prevent terminal escape sequence issues
+
 	say, err := cowsay.Say(
 		m.msg,
 		cowsay.BallonWidth(40),
@@ -21,7 +21,7 @@ func (m Model) View() string {
 
 	if err != nil {
 		slog.Error("could not render cowsay", "error", err)
-		// Fallback to a simple error message
+
 		return ""
 	}
 

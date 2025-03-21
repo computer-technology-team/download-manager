@@ -24,7 +24,6 @@ type Model struct {
 	blurStyle   lipgloss.Style
 }
 
-// Blur implements types.Input.
 func (m *Model) Blur() {
 	m.focused = false
 }
@@ -34,28 +33,23 @@ func (m *Model) Focus() tea.Cmd {
 	return nil
 }
 
-// Error implements types.Input.
 func (m Model) Error() error {
 	return m.err
 }
 
-// FullHelp implements types.Input.
 func (m Model) FullHelp() [][]key.Binding {
 	return [][]key.Binding{m.ShortHelp()}
 }
 
-// ShortHelp implements types.Input.
 func (m Model) ShortHelp() []key.Binding {
 	return []key.Binding{m.fpModel.KeyMap.Down, m.fpModel.KeyMap.Up, m.fpModel.KeyMap.Select,
 		m.fpModel.KeyMap.Back, m.fpModel.KeyMap.Open}
 }
 
-// Value implements types.Input.
 func (m Model) Value() string {
 	return m.selectedDir
 }
 
-// View implements types.Input.
 func (m Model) View() string {
 	if m.focused {
 		return m.fpModel.View()
@@ -81,10 +75,8 @@ func (m *Model) Update(msg tea.Msg) (types.Input[string], tea.Cmd) {
 		slog.Debug("selected in directory picker")
 	}
 
-	// Did the user select a disabled file?
-	// This is only necessary to display an error to the user.
 	if didSelect, path := m.fpModel.DidSelectDisabledFile(msg); didSelect {
-		// Let's clear the selectedFile and display an error.
+
 		m.err = errors.New(path + " is not valid.")
 		m.selectedDir = ""
 	}

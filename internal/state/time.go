@@ -29,12 +29,10 @@ func (t TimeValue) Validate() error {
 	return nil
 }
 
-// String returns the time in HH:MM:SS format
 func (t TimeValue) String() string {
 	return fmt.Sprintf("%02d:%02d:%02d", t.Hour, t.Minute, t.Second)
 }
 
-// Scan implements the sql.Scanner interface for TimeValue
 func (t *TimeValue) Scan(value interface{}) error {
 	if value == nil {
 		*t = TimeValue{Valid: false}
@@ -49,7 +47,7 @@ func (t *TimeValue) Scan(value interface{}) error {
 	case string:
 		timeStr = v
 	case time.Time:
-		// If the database returns a time.Time, extract the time part
+
 		*t = TimeValue{
 			Hour:   v.Hour(),
 			Minute: v.Minute(),
@@ -61,7 +59,6 @@ func (t *TimeValue) Scan(value interface{}) error {
 		return fmt.Errorf("unsupported Scan, storing %T into TimeValue", value)
 	}
 
-	// Parse the time string in format HH:MM:SS
 	parts := strings.Split(timeStr, ":")
 	if len(parts) != 3 {
 		return fmt.Errorf("invalid time format: %s, expected HH:MM:SS", timeStr)
@@ -89,7 +86,6 @@ func (t *TimeValue) Scan(value interface{}) error {
 		Valid:  true,
 	}
 
-	// Validate the time values
 	if err := t.Validate(); err != nil {
 		return err
 	}
@@ -97,7 +93,6 @@ func (t *TimeValue) Scan(value interface{}) error {
 	return nil
 }
 
-// Value implements the driver.Valuer interface for TimeValue
 func (t TimeValue) Value() (driver.Value, error) {
 	if !t.Valid {
 		return nil, nil

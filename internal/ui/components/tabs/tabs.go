@@ -113,7 +113,6 @@ func (m model) Update(msg tea.Msg) (types.View, tea.Cmd) {
 func (m model) View() string {
 	doc := strings.Builder{}
 
-	// Calculate the base width for each tab
 	numTabs := len(m.tabs)
 	tabWidth := (m.width / numTabs)
 
@@ -129,7 +128,6 @@ func (m model) View() string {
 			style = inactiveTabStyle
 		}
 
-		// Adjust borders for connecting tabs
 		border, _, _, _, _ := style.GetBorder()
 		if isFirst && isActive {
 			border.BottomLeft = "│"
@@ -141,23 +139,20 @@ func (m model) View() string {
 			border.BottomRight = "┤"
 		}
 
-		// Add extra width to the last tab to fill the space
 		width := tabWidth
 		if isLast {
 			width = m.width - (tabWidth * (numTabs - 1))
 		}
 
-		style = style.Width(width - 2).Border(border) // -2 for borders
+		style = style.Width(width - 2).Border(border) 
 		renderedTabs = append(renderedTabs, style.Render(t.Name))
 	}
 
-	// Join tabs horizontally
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	doc.WriteString(row)
 	doc.WriteString("\n")
 
-	// Render window content
-	windowContent := windowStyle.Width(m.width - 2).Render(m.GetActiveTab().View.View()) // -2 for borders
+	windowContent := windowStyle.Width(m.width - 2).Render(m.GetActiveTab().View.View()) 
 	doc.WriteString(windowContent)
 	doc.WriteString("\n")
 

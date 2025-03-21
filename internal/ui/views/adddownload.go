@@ -28,10 +28,9 @@ const (
 	fileName
 )
 
-// Error messages
 var (
 	ErrURLRequired        = errors.New("URL is required")
-	ErrURLInvalidProtocol = errors.New("URL must start with http:// or https://")
+	ErrURLInvalidProtocol = errors.New("URL must start with http:
 	ErrURLParseFailed     = errors.New("failed to parse the URL")
 	ErrURLHostEmpty       = errors.New("URL host can not be empty")
 )
@@ -83,7 +82,6 @@ func (s addDownloadView) FullHelp() [][]key.Binding {
 	return [][]key.Binding{s.ShortHelp()}
 }
 
-// ShortHelp implements types.Pane.
 func (s addDownloadView) ShortHelp() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("↓", "down"), key.WithHelp("↓", "next field")),
@@ -104,12 +102,11 @@ func initialModel(ctx context.Context, queueManager queues.QueueManager) (types.
 	}
 
 	inputsUrl := textinput.New()
-	inputsUrl.Placeholder = "https://example.com/"
+	inputsUrl.Placeholder = "https:
 	inputsUrl.Focus()
 	inputsUrl.Width = 50
 	inputsUrl.Prompt = ""
 
-	// URL validator function
 	inputsUrl.Validate = func(s string) error {
 		if s == "" {
 			return ErrURLRequired
@@ -206,7 +203,6 @@ func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 	case addDownloadFormClear:
 		m.err = nil
 
-		// Reset URL input to empty
 		urlInput := m.inputs[url]
 		err := urlInput.SetValue("")
 		if err != nil {
@@ -217,7 +213,6 @@ func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 			})
 		}
 
-		// Reset filename input to empty
 		fileNameInput := m.inputs[fileName]
 		err = fileNameInput.SetValue("")
 		if err != nil {
@@ -228,7 +223,6 @@ func (m addDownloadView) Update(msg tea.Msg) (types.View, tea.Cmd) {
 			})
 		}
 
-		// Reset focus to the URL field
 		m.focused = url
 		for i := range m.inputs {
 			m.inputs[i].Blur()
@@ -274,7 +268,6 @@ func (m addDownloadView) View() string {
 
 	stringBuilder.WriteString("Add Download\n\n")
 
-	// URL input
 	stringBuilder.WriteString("URL: ")
 	if m.focused == url {
 		stringBuilder.WriteString("> ")
@@ -287,7 +280,6 @@ func (m addDownloadView) View() string {
 	}
 	stringBuilder.WriteString("\n\n")
 
-	// Queue name input
 	stringBuilder.WriteString("Queue: ")
 	if m.focused == queueName {
 		stringBuilder.WriteString("> ")
@@ -300,7 +292,6 @@ func (m addDownloadView) View() string {
 	}
 	stringBuilder.WriteString("\n\n")
 
-	// Filename input
 	stringBuilder.WriteString("Filename: ")
 	if m.focused == fileName {
 		stringBuilder.WriteString("> ")
@@ -313,7 +304,6 @@ func (m addDownloadView) View() string {
 	}
 	stringBuilder.WriteString("\n\n")
 
-	// Form-level error message if any
 	if m.err != nil {
 		stringBuilder.WriteString("Error: " + m.err.Error() + "\n\n")
 	}

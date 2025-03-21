@@ -5,7 +5,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Keeping the ELM structure whilst adding KeyMap
 type View interface {
 	help.KeyMap
 	Init() tea.Cmd
